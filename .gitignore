@@ -1,0 +1,26 @@
+*.pyc
+/.vscode
+/.venv
+NOTE.txt
+.env
+logs/
+sessions/
+data/
+docs/node_modules/
+docs/.next/
+docs/out/
+docs/.source/
+docs/package-lock.json
+*.session
+*.session-journal
+business_connections.json
+/todo
+*.sql
+/frontend/node_modules
+/frontend/dist
+/frontend/package-lock.json
+/frontend/tsconfig.tsbuildinfo
+/.claude
+
+# Admin-uploaded PWA icons (runtime data, not source)
+/data/pwa_icons/

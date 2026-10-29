@@ -1,0 +1,524 @@
+"""Auth: Telegram init-data login, phone OTP login, session, and logout."""
+
+import asyncio
+import contextlib
+import hmac
+import json
+import secrets
+import time as time_module
+from typing import Any
+from urllib.parse import parse_qsl
+
+from fastapi import APIRouter, Request
+
+from app import Mdje
+from app.db.crud.discount_codes import DiscountCodeManager
+from app.db.crud.settings import SettingsManager
+from app.db.crud.user import UserCRUD, add_user, is_user_banned
+from app.logger import LogType, get_logger
+from app.models.webapp import (
+    ApiKeyGenerateRequest,
+    ApiKeyGenerateResponse,
+    ApiKeyLoginRequest,
+    LogoutRequest,
+    PhoneLoginStartRequest,
+    PhoneLoginVerifyRequest,
+    WebAppChangeResponse,
+    WebAppInfoResponse,
+    WebAppUserData,
+)
+from app.routers.webapp.errors import SESSION_INVALID, internal_error
+from app.routers.webapp.state import (
+    clear_otp_failures,
+    get_header_auth,
+    is_api_key_login_blocked,
+    is_otp_locked,
+    mark_session_rejected,
+    mark_session_verified,
+    otp_key,
+    otp_sessions,
+    prune_auth_state,
+    record_api_key_login_failure,
+    record_otp_failure,
+    revoke_session_token,
+    revoked_tokens,
+    try_register_otp_start,
+)
+from app.services.billing import payment_stats
+from app.services.payments.ir_gateways.providers import GATEWAYS
+from app.services.send_queue import enqueue
+from app.utils.formatting.conversions import to_unix_timestamp
+from app.utils.formatting.dates import Time_Date
+from app.utils.security.crypto import encrypt_data
+from app.utils.security.webapp_auth import (
+    create_session_token,
+    generate_api_key,
+    hash_api_key,
+    parse_session_token_async,
+    validate_webapp_data,
+)
+
+logger = get_logger(__name__)
+router = APIRouter()
+
+
+async def _send_telegram_code(user_id: int, code: str) -> None:
+    """Send the OTP code to user's Telegram via Bot API."""
+    text = (
+        f"**کد ورود شما:** `{code}`\n"
+        f"این کد به مدت ۵ دقیقه معتبر است.\n"
+        f"اگر شما درخواست ورود نداده‌اید، این پیام را نادیده بگیرید."
+    )
+    with contextlib.suppress(Exception):
+        await Mdje.send_message(user_id, text)
+
+
+async def _send_login_notification(
+    user_id: int, login_method: str, user_info: str | None = None, user_record: Any | None = None
+) -> None:
+    """Send login notification to log channel."""
+    try:
+        if user_record is None:
+            user_record = await UserCRUD().read_user(user_id)
+        if not user_record:
+            return
+
+        phone = user_record.number or "نامشخص"
+
+        notification_text = (
+            f"🔐 **ورود به وب‌سایت**\n\n"
+            f"📱 **شماره:** {phone}\n"
+            f"🆔 **آیدی:** `{user_id}`\n"
+            f"🌐 **روش ورود:** {login_method}\n"
+            f"⏰ **زمان:** {Time_Date()['jf']}"
+        )
+
+        await enqueue(message=notification_text, log_type=LogType.USER_REGISTRATION)
+
+    except Exception as e:
+        # Don't fail login if notification fails
+        logger.warning("Failed to send login notification: %s", e)
+
+
+async def _get_discount_info(user_id: int) -> dict[str, Any] | None:
+    """Get user's discount code information."""
+
+    discount_manager = DiscountCodeManager()
+    discount_code = await discount_manager.get_code_whith_user_id(user_id)
+
+    if not discount_code:
+        return None
+
+    expiration_ts = to_unix_timestamp(discount_code.expiration_date) if discount_code.expiration_date else None
+
+    return {
+        "code": discount_code.code,
+        "percent": int(discount_code.discount_percentage) if discount_code.discount_percentage else 0,
+        "times_used": int(discount_code.times_used) if discount_code.times_used else 0,
+        "usage_limit": int(discount_code.usage_limit) if discount_code.usage_limit else 0,
+        "is_public": bool(discount_code.is_public),
+        "expiration_timestamp": expiration_ts,
+    }
+
+
+def _convert_decimals(obj: Any) -> Any:
+    """Convert Decimal objects to int for JSON serialization."""
+
+    if isinstance(obj, dict):
+        return {key: _convert_decimals(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_convert_decimals(item) for item in obj]
+    if hasattr(obj, "__class__") and "Decimal" in str(obj.__class__):
+        return int(obj)
+    return obj
+
+
+async def _get_transaction_stats(user_id: int) -> dict[str, Any]:
+    """Get user's transaction statistics; Iranian gateways are grouped under `ir_gateways`."""
+
+    def shape(totals: dict[str, dict[str, int]]) -> dict[str, Any]:
+        stats: dict[str, Any] = {m: totals[m] for m in payment_stats.METHODS if m not in GATEWAYS}
+        stats["ir_gateways"] = {key: totals[key] for key in GATEWAYS}
+        return stats
+
+    try:
+        return shape(await payment_stats.method_totals(user_id=user_id))
+    except Exception as e:
+        logger.error("Error getting transaction stats: %s", e)
+        return shape({method: {"count": 0, "total_amount": 0} for method in payment_stats.METHODS})
+
+
+async def _build_user_profile(
+    user_id: int, user_record: Any | None, telegram_user: WebAppUserData | None
+) -> dict[str, Any]:
+    """Build user profile data."""
+
+    invite_count = int(user_record.invite) if user_record and user_record.invite else 0
+    balance_amount = int(user_record.amount) if user_record and user_record.amount else 0
+    is_safe_mode = bool(user_record.safe_mode) if user_record else False
+    phone_number = user_record.number if user_record else None
+
+    join_date = to_unix_timestamp(user_record.time_s) if user_record and user_record.time_s else None
+    has_api_key = bool(user_record.api_key_hash) if user_record else False
+    api_key_created_at = int(user_record.api_key_created_at) if user_record and user_record.api_key_created_at else None
+
+    discount_info = await _get_discount_info(user_id)
+    transaction_stats = await _get_transaction_stats(user_id)
+
+    return {
+        "id": user_id,
+        "username": telegram_user.username if telegram_user else None,
+        "first_name": telegram_user.first_name if telegram_user else None,
+        "photo_url": telegram_user.photo_url if telegram_user else None,
+        "invite": invite_count,
+        "amount": balance_amount,
+        "safe": is_safe_mode,
+        "number": phone_number,
+        "join_date": join_date,
+        "discount": discount_info,
+        "transactions": transaction_stats,
+        "has_api_key": has_api_key,
+        "api_key_created_at": api_key_created_at,
+    }
+
+
+async def build_user_payload_no_services(
+    user_id: int, telegram_user: WebAppUserData | None = None, user_record: Any | None = None
+) -> dict[str, Any]:
+    """Build user payload without services (fast login/info).
+
+    Opening the WebApp is a valid first contact with the bot, same as /start,
+    so a user with no DB row yet (never messaged the bot) gets registered here.
+    Best-effort: the WebApp must still open even if this registration fails or
+    is slow, so it's bounded by a timeout and never allowed to fail the request.
+    """
+
+    if user_record is None:
+        user_record = await UserCRUD().read_user(user_id)
+        if user_record is None:
+            try:
+                await asyncio.wait_for(add_user(user_id=user_id, step="start", time_s=Time_Date()["stamp"]), timeout=5)
+            except Exception:
+                logger.warning("webapp: failed to auto-register user %s", user_id, exc_info=True)
+            else:
+                user_record = await UserCRUD().read_user(user_id)
+
+    user_profile = await _build_user_profile(user_id, user_record, telegram_user)
+    settings = await SettingsManager().get_settings()
+    api_key_login_mode = getattr(settings, "api_key_login_mode", "none") if settings else "none"
+    return {
+        "ok": True,
+        "user": user_profile,
+        "api_key_login_mode": api_key_login_mode,
+    }
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort caller IP (proxy-aware), used only for login throttling."""
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded[:64]
+    client = getattr(request, "client", None)
+    return (getattr(client, "host", "") or "unknown")[:64]
+
+
+_BANNED_ERROR = "دسترسی شما مسدود شده است"
+
+
+async def _ensure_not_banned(user_id: int) -> None:
+    if await is_user_banned(int(user_id)):
+        raise ValueError(_BANNED_ERROR)
+
+
+def _merge_request_auth(
+    *,
+    init_data: str | None = None,
+    session_token: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Prefer secure auth headers; fall back to body/query values for compatibility."""
+    header_session, header_init = get_header_auth()
+    return header_session or session_token, header_init or init_data
+
+
+async def authenticate_user(
+    init_data: str | None = None,
+    session_token: str | None = None,
+) -> int | None:
+    """Authenticate user and return user ID."""
+    session_token, init_data = _merge_request_auth(init_data=init_data, session_token=session_token)
+
+    if init_data:
+        params = dict(parse_qsl(init_data))
+        is_valid, error = validate_webapp_data(params)
+        if not is_valid:
+            raise ValueError(error)
+
+        user_data = json.loads(params.get("user"))
+        user_id = user_data.get("id")
+        await _ensure_not_banned(user_id)
+        return user_id
+
+    if session_token:
+        prune_auth_state()
+        if session_token in revoked_tokens:
+            mark_session_rejected()
+            raise ValueError("نشست منقضی شده است")
+        ok, err, payload = await parse_session_token_async(session_token)
+        if not ok or not payload:
+            mark_session_rejected()
+            raise ValueError(err or "توکن نامعتبر است")
+        uid = int(payload["uid"])
+        if int(payload.get("ver", 0)) != await UserCRUD().get_session_version(uid):
+            mark_session_rejected()
+            raise ValueError("نشست منقضی شده است. دوباره وارد شوید")
+        await _ensure_not_banned(uid)
+        mark_session_verified(session_token)
+        return uid
+
+    mark_session_rejected()
+    raise ValueError("اطلاعات ناقص است")
+
+
+@router.get("/webapp/info", response_model=WebAppInfoResponse)
+async def get_webapp_info(request: Request) -> WebAppInfoResponse:
+    """Get user information for web app."""
+    _, header_init = get_header_auth()
+    # Prefer header; legacy fallback keeps raw Telegram init-data in the query string.
+    query_params = dict(parse_qsl(header_init)) if header_init else dict(request.query_params)
+
+    is_valid, error_message = validate_webapp_data(query_params)
+    if not is_valid:
+        return WebAppInfoResponse(ok=False, error=error_message)
+
+    try:
+        user_json = query_params.get("user")
+        if not user_json:
+            return WebAppInfoResponse(ok=False, error="اطلاعات کاربر یافت نشد")
+
+        user_data = json.loads(user_json)
+        user_id = int(user_data.get("id"))
+        await _ensure_not_banned(user_id)
+
+        telegram_user = WebAppUserData(**user_data)
+
+        payload = await build_user_payload_no_services(user_id, telegram_user=telegram_user)
+        return WebAppInfoResponse(**payload)
+
+    except ValueError as e:
+        return WebAppInfoResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppInfoResponse(ok=False, error=internal_error("get_webapp_info"))
+
+
+_OTP_THROTTLED_ERROR = "تعداد درخواست‌ها زیاد است. چند دقیقه بعد دوباره تلاش کنید"
+
+
+@router.post("/webapp/otp/start", response_model=WebAppChangeResponse)
+async def start_phone_login(req: PhoneLoginStartRequest, request: Request) -> WebAppChangeResponse:
+    """Start phone login: generate OTP and send via Telegram bot."""
+    try:
+        prune_auth_state()
+        user = await UserCRUD().get_user_by_phone(req.phone)
+        key = otp_key(str(user.number or req.phone) if user else str(req.phone).strip())
+        if not try_register_otp_start(key, f"otp-ip:{_client_ip(request)}"):
+            return WebAppChangeResponse(ok=False, error=_OTP_THROTTLED_ERROR)
+        if not user:
+            return WebAppChangeResponse(ok=False, error="شماره پیدا نشد یا کاربر ربات را شروع نکرده است")
+
+        await _ensure_not_banned(int(user.id))
+
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        otp_sessions[key] = {
+            "code": code,
+            "user_id": int(user.id),
+            "exp": int(time_module.time()) + 300,
+            "attempts": 0,
+        }
+
+        await _send_telegram_code(int(user.id), code)
+        return WebAppChangeResponse(ok=True)
+    except ValueError as e:
+        return WebAppChangeResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppChangeResponse(ok=False, error=internal_error("start_phone_login"))
+
+
+@router.post("/webapp/otp/verify", response_model=WebAppInfoResponse)
+async def verify_phone_login(req: PhoneLoginVerifyRequest) -> WebAppInfoResponse:
+    """Verify OTP and return user payload + session token."""
+    try:
+        user = await UserCRUD().get_user_by_phone(req.phone)
+        if not user:
+            return WebAppInfoResponse(ok=False, error="شماره یافت نشد")
+
+        key = otp_key(str(user.number or req.phone))
+        sess = otp_sessions.get(key)
+        now = int(time_module.time())
+        if is_otp_locked(key):
+            otp_sessions.pop(key, None)
+            return WebAppInfoResponse(ok=False, error=_OTP_THROTTLED_ERROR)
+
+        if not sess or sess.get("exp", 0) < now:
+            otp_sessions.pop(key, None)
+            return WebAppInfoResponse(ok=False, error="کد منقضی شده است. دوباره تلاش کنید")
+
+        if sess.get("attempts", 0) >= 5:
+            otp_sessions.pop(key, None)
+            return WebAppInfoResponse(ok=False, error="تعداد تلاش‌ها زیاد است. دوباره تلاش کنید")
+
+        if not hmac.compare_digest(str(sess.get("code")).encode(), str(req.code).strip().encode()):
+            sess["attempts"] = int(sess.get("attempts", 0)) + 1
+            record_otp_failure(key)
+            return WebAppInfoResponse(ok=False, error="کد وارد شده نادرست است")
+
+        otp_sessions.pop(key, None)
+        clear_otp_failures(key)
+        await _ensure_not_banned(int(sess["user_id"]))
+        version = await UserCRUD().get_session_version(int(sess["user_id"]))
+        token = create_session_token(int(sess["user_id"]), session_version=version)
+        payload = await build_user_payload_no_services(int(user.id), user_record=user)
+        payload["session_token"] = token
+
+        await _send_login_notification(int(user.id), "شماره تلفن و کد تایید", user_record=user)
+
+        return WebAppInfoResponse(**payload)
+    except ValueError as e:
+        return WebAppInfoResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppInfoResponse(ok=False, error=internal_error("verify_phone_login"))
+
+
+@router.post("/webapp/auth/api-key", response_model=WebAppInfoResponse)
+async def login_with_api_key(req: ApiKeyLoginRequest, request: Request) -> WebAppInfoResponse:
+    """Log in using a profile-generated API key instead of phone + OTP.
+
+    Works regardless of `api_key_login_mode` -- that setting only gates
+    generating/regenerating a key, not using one that already exists.
+    """
+    try:
+        client_ip = _client_ip(request)
+        prune_auth_state()
+        if is_api_key_login_blocked(client_ip):
+            return WebAppInfoResponse(ok=False, error="تعداد تلاش‌ها زیاد است. کمی بعد دوباره تلاش کنید")
+
+        raw_key = (req.api_key or "").strip()
+        if not raw_key:
+            return WebAppInfoResponse(ok=False, error="کلید API ارسال نشده است")
+
+        user = await UserCRUD().get_user_by_api_key_hash(hash_api_key(raw_key))
+        if not user:
+            record_api_key_login_failure(client_ip)
+            return WebAppInfoResponse(ok=False, error="کلید API نامعتبر است")
+        await _ensure_not_banned(int(user.id))
+
+        version = await UserCRUD().get_session_version(int(user.id))
+        token = create_session_token(int(user.id), session_version=version)
+        payload = await build_user_payload_no_services(int(user.id), user_record=user)
+        payload["session_token"] = token
+
+        await _send_login_notification(int(user.id), "کلید API", user_record=user)
+
+        return WebAppInfoResponse(**payload)
+    except ValueError as e:
+        return WebAppInfoResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppInfoResponse(ok=False, error=internal_error("login_with_api_key"))
+
+
+@router.post("/webapp/profile/api-key/generate", response_model=ApiKeyGenerateResponse)
+async def generate_profile_api_key(req: ApiKeyGenerateRequest) -> ApiKeyGenerateResponse:
+    """Generate (or regenerate) the caller's API key.
+
+    Bumps `session_version`, so every session token issued before this call --
+    including the one used to call it -- stops working right after. The raw key
+    is still returned here so the frontend can show it once before treating the
+    caller's local session as gone (it must not disappear mid-copy).
+    """
+    try:
+        user_id = await authenticate_user(init_data=req.init_data, session_token=req.session_token)
+
+        settings = await SettingsManager().get_settings()
+        mode = getattr(settings, "api_key_login_mode", "none") if settings else "none"
+        if mode == "none":
+            return ApiKeyGenerateResponse(ok=False, error="ساخت کلید API غیرفعال است")
+
+        user = await UserCRUD().read_user(user_id)
+        if mode == "phone_verified" and not (user and user.number):
+            return ApiKeyGenerateResponse(
+                ok=False, error="برای ساخت کلید API ابتدا باید شماره تلفن خود را در ربات ثبت کنید"
+            )
+
+        raw_key = generate_api_key()
+        created_at = int(time_module.time())
+        await UserCRUD().set_user_api_key(
+            user_id,
+            api_key_hash=hash_api_key(raw_key),
+            api_key_encrypted=encrypt_data(raw_key),
+            created_at=created_at,
+        )
+        await UserCRUD().bump_session_version(user_id)
+        return ApiKeyGenerateResponse(ok=True, api_key=raw_key, created_at=created_at)
+    except ValueError as e:
+        return ApiKeyGenerateResponse(ok=False, error=str(e))
+    except Exception:
+        return ApiKeyGenerateResponse(ok=False, error=internal_error("generate_profile_api_key"))
+
+
+@router.get("/webapp/info/session", response_model=WebAppInfoResponse)
+async def get_webapp_info_session(
+    request: Request,
+    session_token: str | None = None,
+) -> WebAppInfoResponse:
+    """Get user information for web app using a persisted session token.
+
+    Prefer `Authorization: Bearer` / `X-Session-Token` headers. Query param is
+    accepted only as a deprecated fallback.
+    """
+    token, _ = _merge_request_auth(session_token=session_token)
+    if not token:
+        return WebAppInfoResponse(ok=False, error="توکن احراز هویت ارسال نشده است", error_code=SESSION_INVALID)
+    prune_auth_state()
+    if token in revoked_tokens:
+        return WebAppInfoResponse(ok=False, error="نشست منقضی شده است", error_code=SESSION_INVALID)
+    ok, err, payload = await parse_session_token_async(token)
+    if not ok or not payload:
+        return WebAppInfoResponse(ok=False, error=err or "توکن نامعتبر است", error_code=SESSION_INVALID)
+    uid = int(payload["uid"])  # type: ignore
+    if int(payload.get("ver", 0)) != await UserCRUD().get_session_version(uid):
+        return WebAppInfoResponse(ok=False, error="نشست منقضی شده است. دوباره وارد شوید", error_code=SESSION_INVALID)
+    if await is_user_banned(uid):
+        return WebAppInfoResponse(ok=False, error=_BANNED_ERROR)
+    mark_session_verified(token)
+    try:
+        payload = await build_user_payload_no_services(int(uid))
+        payload["session_token"] = token
+        return WebAppInfoResponse(**payload)
+    except ValueError as e:
+        return WebAppInfoResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppInfoResponse(ok=False, error=internal_error("get_webapp_info_session"))
+
+
+@router.post("/webapp/logout", response_model=WebAppChangeResponse)
+async def logout(req: LogoutRequest) -> WebAppChangeResponse:
+    """Revoke a session token and every token renewed from it.
+
+    Bumping ``session_version`` is persisted, so it also outlives restarts and the
+    in-memory revocation list (which only covers this exact token for a day).
+    """
+    try:
+        token, _ = _merge_request_auth(session_token=req.session_token)
+        if not token:
+            return WebAppChangeResponse(ok=False, error="توکن احراز هویت ارسال نشده است")
+        ok, err, payload = await parse_session_token_async(token)
+        if not ok or not payload:
+            return WebAppChangeResponse(ok=False, error=err or "توکن نامعتبر است")
+        revoke_session_token(token)
+        uid = int(payload["uid"])
+        if int(payload.get("ver", 0)) == await UserCRUD().get_session_version(uid):
+            await UserCRUD().bump_session_version(uid)
+        return WebAppChangeResponse(ok=True)
+    except ValueError as e:
+        return WebAppChangeResponse(ok=False, error=str(e))
+    except Exception:
+        return WebAppChangeResponse(ok=False, error=internal_error("logout"))

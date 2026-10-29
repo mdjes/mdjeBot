@@ -1,0 +1,18 @@
+MdjeBot
+Maintained by Mdje
+
+MdjeBot is a modified version (fork) of "PasarguardBot", originally written by
+Amir Kenzo (https://github.com/AmirKenzo/PasarguardBot) and licensed under the
+GNU Affero General Public License v3.0 together with the Commons Clause
+License Condition v1.0.
+
+Modifications by Mdje (2026):
+  - Renamed the project, packages, scripts, container image, services and
+    session files from "PasarguardBot" to "MdjeBot".
+  - Replaced branding, links, support/contact details and descriptions with
+    those of Mdje.
+
+The original LICENSE text, including the Licensor notice and the Commons
+Clause condition, is kept unchanged in the LICENSE file and continues to
+apply to this work. This file is provided to satisfy Section 5(a) of the
+AGPL-3.0 (notice of modification).

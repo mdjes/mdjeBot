@@ -1,0 +1,442 @@
+"""Reseller account operations shared by the bot, the user web app and the admin panel.
+
+Nothing here talks to Telegram: every function returns data or ``(ok, message)`` so each
+front end renders its own UI on top of the same rules.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from app.db.crud.panels import PanelsManager
+from app.db.crud.reseller_accounts import ResellerAccountCRUD
+from app.db.crud.reseller_billing_snapshots import ResellerBillingSnapshotCRUD
+from app.db.crud.reseller_plans import ResellerPlanManager
+from app.db.crud.settings import SettingsManager
+from app.db.crud.user import UserCRUD
+from app.logger import get_logger
+from app.services.billing.reseller_pricing import resolve_live_unit_price
+from app.services.panels.admins import (
+    activate_reseller_admin,
+    get_reseller_admin,
+    reset_reseller_admin_password,
+    suspend_reseller_admin,
+)
+from app.services.panels.settings import get_panel_login_url, panel_reseller_button_enabled
+from app.services.reseller.logging import (
+    EVENT_ADMIN_PAUSE,
+    EVENT_ADMIN_RESUME,
+    EVENT_DELETE,
+    EVENT_EXTEND,
+    EVENT_MAX_USERS,
+    EVENT_PASSWORD,
+    EVENT_PAUSE,
+    EVENT_RESUME,
+    send_reseller_log,
+)
+from app.services.reseller.panel_sync import purge_reseller_from_panel, sync_reseller_max_users
+from app.services.reseller.plan_rules import (
+    ADDON_DAYS,
+    ADDON_USERS,
+    ADDON_VOLUME,
+    PAYG_MODES,
+    addon_price,
+    is_renewable,
+    rule_for,
+)
+from app.services.reseller.usage_cap import USAGE_CAPPED_STATUS
+from app.services.reseller.usage_meter import pending_usage_charge
+from app.utils.formatting.dates import Time_Date
+from app.utils.security.crypto import decrypt_data, encrypt_data
+
+log = get_logger(__name__)
+
+ADMIN_LOCKED_STATUS = "admin_paused"
+
+# Actions a reseller may run on one account; front ends show a control per action.
+ACTION_CREDENTIALS = "credentials"
+ACTION_CHANGE_PASSWORD = "change_password"
+ACTION_PAUSE = "pause"
+ACTION_RESUME = "resume"
+ACTION_RENEW = "renew"
+ACTION_USAGE_REPORT = "usage_report"
+ACTION_USAGE_CAP = "usage_cap"
+ACTION_BUY_CAPACITY = "buy_user_capacity"
+ACTION_EXTRA_DAYS = "extra_days"
+ACTION_EXTRA_VOLUME = "extra_volume"
+ACTION_DELETE = "delete"
+
+
+def grace_seconds(settings) -> int:
+    """How long an expired reseller keeps its panel admin before it is purged."""
+    days = int(getattr(settings, "reseller_grace_days", 7) or 7) if settings else 7
+    return max(1, days) * 86400
+
+
+def is_admin_locked(account) -> bool:
+    return account.status == ADMIN_LOCKED_STATUS
+
+
+def account_actions(account, panel, plan=None) -> frozenset[str]:
+    """Actions allowed for ``account``: its status, its plan's rules and the panel's button toggles.
+
+    ``plan`` is the account's plan; without it no add-on is offered (their prices live on the plan).
+    """
+
+    def enabled(key: str) -> bool:
+        return panel_reseller_button_enabled(panel, key) if panel else True
+
+    actions: set[str] = set()
+    if not is_admin_locked(account):
+        if enabled("credentials"):
+            actions.add(ACTION_CREDENTIALS)
+        if enabled("change_password"):
+            actions.add(ACTION_CHANGE_PASSWORD)
+        if enabled("toggle_status"):
+            if account.status == "paused":
+                actions.add(ACTION_RESUME)
+            elif account.status in ("active", "suspended"):
+                actions.add(ACTION_PAUSE)
+        if is_renewable(account.pricing_mode) and account.plan_id and plan is not None:
+            actions.add(ACTION_RENEW)
+        if account.pricing_mode in PAYG_MODES and enabled("usage_report"):
+            actions.add(ACTION_USAGE_REPORT)
+        if rule_for(account.pricing_mode).usage_cap and enabled("usage_cap"):
+            actions.add(ACTION_USAGE_CAP)
+        if addon_price(plan, ADDON_DAYS) and account.expiration_time and enabled(ACTION_EXTRA_DAYS):
+            actions.add(ACTION_EXTRA_DAYS)
+        if (
+            addon_price(plan, ADDON_VOLUME)
+            and int(account.data_limit or 0) > 0
+            and account.status != "expired"
+            and enabled(ACTION_EXTRA_VOLUME)
+        ):
+            actions.add(ACTION_EXTRA_VOLUME)
+        if addon_price(plan, ADDON_USERS) and int(account.max_users or 0) > 0 and enabled(ACTION_BUY_CAPACITY):
+            actions.add(ACTION_BUY_CAPACITY)
+    if enabled("delete"):
+        actions.add(ACTION_DELETE)
+    return frozenset(actions)
+
+
+async def get_owned_account(code: Any, telegram_id: int):
+    """Return the account only when it belongs to ``telegram_id``."""
+    ok, account = await ResellerAccountCRUD().get_account(code)
+    if not ok or account.telegram_id != telegram_id:
+        return None
+    return account
+
+
+@dataclass
+class AccountLiveInfo:
+    """Account data merged with the live panel admin, wallet and billing totals."""
+
+    panel: Any
+    plan: Any
+    panel_name: str
+    login_url: str
+    used_traffic: int
+    data_limit: int
+    total_users: int
+    admin_status: str
+    live_rate: float
+    balance: int | None
+    billed_total: int | None
+    grace_days_left: int | None
+
+
+async def load_account_live_info(account) -> AccountLiveInfo:
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    plan = await ResellerPlanManager().get_plan(account.plan_id) if account.plan_id else None
+    admin = await get_reseller_admin(panel, account.panel_admin_id) if panel else None
+
+    used = int(getattr(admin, "used_traffic", 0) or 0) if admin else 0
+    data_limit = (
+        int(getattr(admin, "data_limit", 0) or account.data_limit or 0) if admin else int(account.data_limit or 0)
+    )
+
+    grace_days_left = None
+    if account.expiration_time and account.status == "expired":
+        grace = grace_seconds(await SettingsManager().get_settings())
+        grace_left = max(0, account.expiration_time + grace - Time_Date()["stamp"])
+        grace_days_left = max(1, grace_left // 86400) if grace_left else 0
+
+    balance = billed_total = None
+    if account.pricing_mode in PAYG_MODES:
+        user = await UserCRUD().read_user(account.telegram_id)
+        balance = user.amount if user else 0
+        state = ResellerAccountCRUD.load_billing_state(account.billing_state)
+        _, snapshot_total = await ResellerBillingSnapshotCRUD().get_usage_totals(account.code)
+        billed_total = max(int(state.get("total_billed") or 0), snapshot_total)
+
+    return AccountLiveInfo(
+        panel=panel,
+        plan=plan,
+        panel_name=panel.name if panel else str(account.panel_code),
+        login_url=get_panel_login_url(panel) if panel else "—",
+        used_traffic=used,
+        data_limit=data_limit,
+        total_users=int(getattr(admin, "total_users", 0) or 0) if admin else 0,
+        admin_status=str(getattr(admin, "status", None) or account.status),
+        live_rate=resolve_live_unit_price(account, plan),
+        balance=balance,
+        billed_total=billed_total,
+        grace_days_left=grace_days_left,
+    )
+
+
+def reveal_password(account) -> str:
+    return decrypt_data(account.password_encrypted)
+
+
+async def reset_password(
+    account, *, actor_id: int | None = None, actor_role: str | None = None
+) -> tuple[bool, str, str | None]:
+    """Generate a new panel password. Returns (ok, message, new_password)."""
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    if not panel:
+        return False, "پنل یافت نشد.", None
+    try:
+        new_password = await reset_reseller_admin_password(panel, account.panel_admin_id, account.username)
+    except Exception as exc:
+        log.error("password reset failed code=%s: %s", account.code, exc)
+        return False, "خطا در تغییر رمز.", None
+    await ResellerAccountCRUD().update_account(account.code, password_encrypted=encrypt_data(new_password))
+    await send_reseller_log(
+        "🔑 تغییر رمز نمایندگی" + (f" توسط {actor_role}" if actor_role else ""),
+        account=account,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        event=EVENT_PASSWORD,
+    )
+    return True, "✅ رمز جدید اعمال شد.", new_password
+
+
+async def _resume_balance_error(account, *, for_admin: bool) -> str | None:
+    """Wallet check before re-enabling a pay-as-you-go account; None when it may resume."""
+    if account.pricing_mode not in PAYG_MODES:
+        return None
+    user = await UserCRUD().read_user(account.telegram_id)
+    if not user:
+        return None
+    if account.pricing_mode == "usage":
+        needed = 1
+        panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+        if panel:
+            plan = await ResellerPlanManager().get_plan(account.plan_id) if account.plan_id else None
+            pending = await pending_usage_charge(account, panel, plan)
+            needed = max(needed, pending or 0)
+        if user.amount < needed:
+            return (
+                f"موجودی کیف پول کاربر برای فعال‌سازی کافی نیست (حداقل {needed:,} تومان)."
+                if for_admin
+                else f"برای فعال‌سازی مجدد حداقل {needed:,} تومان موجودی لازم است."
+            )
+    if account.pricing_mode == "hourly":
+        plan = await ResellerPlanManager().get_plan(account.plan_id) if account.plan_id else None
+        rate = int(resolve_live_unit_price(account, plan))
+        if user.amount < max(1, rate // 60):
+            return (
+                "موجودی کاربر برای ادامه پلن ساعتی کافی نیست."
+                if for_admin
+                else "موجودی برای ادامه پلن ساعتی کافی نیست."
+            )
+    return None
+
+
+async def pause_account(account) -> tuple[bool, str]:
+    if is_admin_locked(account):
+        return False, "این نمایندگی توسط ادمین غیرفعال شده است."
+    if account.status == "paused":
+        return True, "پنل از قبل غیرفعال است."
+    if account.status == "expired":
+        return False, "نمایندگی منقضی شده است."
+    if account.status == USAGE_CAPPED_STATUS:
+        return False, "پنل به‌خاطر سقف مصرف غیرفعال است. ابتدا سقف را تغییر دهید."
+
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    if not panel:
+        return False, "پنل یافت نشد."
+    try:
+        await suspend_reseller_admin(panel, account.panel_admin_id)
+    except Exception as exc:
+        log.error("pause reseller failed code=%s: %s", account.code, exc)
+        return False, "خطا در غیرفعال‌سازی پنل."
+
+    await ResellerAccountCRUD().update_account(account.code, status="paused")
+    await send_reseller_log(
+        "⏸ غیرفعال‌سازی نمایندگی توسط کاربر", account=account, actor_id=account.telegram_id, event=EVENT_PAUSE
+    )
+    return True, "پنل غیرفعال شد. تا زمان فعال‌سازی مجدد، موجودی کسر نمی‌شود."
+
+
+async def pause_account_by_admin(account, *, actor_id: int | None = None) -> tuple[bool, str]:
+    if is_admin_locked(account):
+        return True, "پنل از قبل توسط ادمین غیرفعال است."
+    if account.status == "expired":
+        return False, "نمایندگی منقضی شده است."
+
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    if not panel:
+        return False, "پنل یافت نشد."
+    try:
+        await suspend_reseller_admin(panel, account.panel_admin_id)
+    except Exception as exc:
+        log.error("admin pause reseller failed code=%s: %s", account.code, exc)
+        return False, "خطا در غیرفعال‌سازی پنل."
+
+    await ResellerAccountCRUD().update_account(account.code, status=ADMIN_LOCKED_STATUS)
+    await send_reseller_log(
+        "⛔️ غیرفعال‌سازی نمایندگی توسط ادمین",
+        account=account,
+        actor_id=actor_id,
+        actor_role="ادمین",
+        event=EVENT_ADMIN_PAUSE,
+    )
+    return True, "نمایندگی توسط ادمین غیرفعال شد."
+
+
+async def resume_account(account) -> tuple[bool, str]:
+    if is_admin_locked(account):
+        return False, "فعال‌سازی این نمایندگی فقط توسط ادمین امکان‌پذیر است."
+    if account.status != "paused":
+        return False, "این نمایندگی در حالت غیرفعال نیست."
+
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    if not panel:
+        return False, "پنل یافت نشد."
+    error = await _resume_balance_error(account, for_admin=False)
+    if error:
+        return False, error
+    try:
+        await activate_reseller_admin(panel, account.panel_admin_id)
+    except Exception as exc:
+        log.error("resume reseller failed code=%s: %s", account.code, exc)
+        return False, "خطا در فعال‌سازی پنل."
+
+    await ResellerAccountCRUD().reset_billing_clock(account.code, status="active")
+    await send_reseller_log(
+        "▶️ فعال‌سازی نمایندگی توسط کاربر", account=account, actor_id=account.telegram_id, event=EVENT_RESUME
+    )
+    return True, "پنل دوباره فعال شد."
+
+
+async def resume_account_by_admin(account, *, actor_id: int | None = None) -> tuple[bool, str]:
+    if account.status not in ("paused", ADMIN_LOCKED_STATUS):
+        return False, "این نمایندگی در حالت غیرفعال نیست."
+
+    panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+    if not panel:
+        return False, "پنل یافت نشد."
+    if account.status == "paused":
+        error = await _resume_balance_error(account, for_admin=True)
+        if error:
+            return False, error
+    try:
+        await activate_reseller_admin(panel, account.panel_admin_id)
+    except Exception as exc:
+        log.error("admin resume reseller failed code=%s: %s", account.code, exc)
+        return False, "خطا در فعال‌سازی پنل."
+
+    await ResellerAccountCRUD().reset_billing_clock(account.code, status="active")
+    await send_reseller_log(
+        "▶️ فعال‌سازی نمایندگی توسط ادمین",
+        account=account,
+        actor_id=actor_id,
+        actor_role="ادمین",
+        event=EVENT_ADMIN_RESUME,
+    )
+    return True, "نمایندگی توسط ادمین فعال شد."
+
+
+async def extend_account_by_admin(account, *, days: int, actor_id: int | None = None) -> tuple[bool, str]:
+    """Push the expiry forward for free; an expired account is switched back on."""
+    if days <= 0:
+        return False, "تعداد روز نامعتبر است."
+    if not account.expiration_time:
+        return False, "این نمایندگی تاریخ انقضا ندارد."
+
+    now = Time_Date()["stamp"]
+    new_expiry = max(int(account.expiration_time), now) + days * 86400
+    reactivated = account.status == "expired"
+    if reactivated:
+        panel = await PanelsManager().get_panel_by_code(code=account.panel_code)
+        if not panel:
+            return False, "پنل یافت نشد."
+        try:
+            await activate_reseller_admin(panel, account.panel_admin_id)
+        except Exception as exc:
+            log.error("admin extend reactivate failed code=%s: %s", account.code, exc)
+            return False, "خطا در فعال‌سازی پنل."
+        await ResellerAccountCRUD().reset_billing_clock(account.code, status="active", expiration_time=new_expiry)
+    else:
+        await ResellerAccountCRUD().update_account(account.code, expiration_time=new_expiry)
+
+    await send_reseller_log(
+        "📅 تمدید رایگان نمایندگی توسط ادمین",
+        account=account,
+        actor_id=actor_id,
+        actor_role="ادمین",
+        extra_lines=[f"⏰ <b>روز اضافه‌شده:</b> <code>{days}</code>"],
+        event=EVENT_EXTEND,
+        data={"days": days, "expiration_time": new_expiry, "reactivated": reactivated},
+    )
+    message = f"{days} روز به اعتبار نمایندگی اضافه شد."
+    if reactivated:
+        message += " پنل دوباره فعال شد."
+    return True, message
+
+
+async def set_max_users_by_admin(account, *, max_users: int, actor_id: int | None = None) -> tuple[bool, str]:
+    """Set the panel admin's user limit; 0 removes it."""
+    if max_users < 0:
+        return False, "مقدار نامعتبر است."
+    before = int(account.max_users or 0)
+    if before == max_users:
+        return True, "سقف یوزر تغییری نکرد."
+    ok, error = await sync_reseller_max_users(account, max_users)
+    if not ok:
+        return False, error or "اعمال سقف یوزر ناموفق بود."
+    plan = await ResellerPlanManager().get_plan(account.plan_id) if account.plan_id else None
+    plan_max = int(plan.max_users or 0) if plan else 0
+    extra = max(0, max_users - plan_max) if max_users and plan_max else 0
+    await ResellerAccountCRUD().update_account(account.code, max_users=max_users or None, extra_users=extra or None)
+    await send_reseller_log(
+        "👥 تغییر سقف یوزر توسط ادمین",
+        account=account,
+        actor_id=actor_id,
+        actor_role="ادمین",
+        extra_lines=[f"📉 <b>قبل:</b> <code>{before}</code>", f"📈 <b>بعد:</b> <code>{max_users}</code>"],
+        event=EVENT_MAX_USERS,
+        data={"limit_before": before, "limit_after": max_users},
+    )
+    return True, "سقف یوزر به‌روزرسانی شد." if max_users else "سقف یوزر برداشته شد."
+
+
+DELETE_CONFIRM_MISMATCH = "برای حذف، یوزرنیم نمایندگی را دقیق وارد کنید."
+
+
+def delete_confirmation_matches(account, typed: str | None) -> bool:
+    """Web deletes are irreversible, so the caller must retype the reseller's username."""
+    expected = str(getattr(account, "username", "") or "").strip()
+    return bool(expected) and str(typed or "").strip().casefold() == expected.casefold()
+
+
+async def delete_account(account, *, actor_id: int | None = None, actor_role: str = "کاربر") -> tuple[bool, str]:
+    deleted_users, safe_to_drop = await purge_reseller_from_panel(account)
+    if not safe_to_drop:
+        return False, "حذف ادمین از پنل ناموفق بود. با پشتیبانی تماس بگیرید."
+    await ResellerAccountCRUD().delete_account(account.code)
+    await send_reseller_log(
+        "🗑 حذف نمایندگی",
+        account=account,
+        actor_id=actor_id or account.telegram_id,
+        actor_role=actor_role,
+        extra_lines=[
+            f"👥 <b>یوزر حذف‌شده:</b> <code>{deleted_users}</code>",
+        ],
+        event=EVENT_DELETE,
+        data={"deleted_users": deleted_users},
+    )
+    return True, f"نمایندگی `{account.username}` و {deleted_users} یوزر وابسته حذف شدند."

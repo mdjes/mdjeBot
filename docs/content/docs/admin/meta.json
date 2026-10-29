@@ -1,0 +1,31 @@
+{
+  "title": "پنل ادمین",
+  "icon": "Shield",
+  "pages": [
+    "index",
+    "---راه‌اندازی فروش---",
+    "panels",
+    "plans",
+    "gateway",
+    "tonpays",
+    "bot-settings",
+    "---مشتریان و فروش---",
+    "users",
+    "support",
+    "discounts",
+    "referral",
+    "reseller-plans",
+    "stats",
+    "---ارتباط و ظاهر---",
+    "broadcast",
+    "bulk-ops",
+    "channels",
+    "texts-keyboards",
+    "links-apps",
+    "---نگهداری---",
+    "logs",
+    "backup-restore",
+    "migration",
+    "automation"
+  ]
+}

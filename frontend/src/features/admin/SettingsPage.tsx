@@ -1,0 +1,321 @@
+import { useEffect, useState } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { PageHeader } from "../../components/layout/PageHeader";
+import { Button, ErrorState, Input, SegmentedControl, Skeleton, Tabs } from "../../components/ui";
+import type { TabItem } from "../../components/ui";
+import { panelSettingsApi } from "../../api/panel";
+import type { PanelSettingValue } from "../../types/panel";
+import { usePanelAction, usePanelQuery } from "../../queries/usePanelApi";
+import { IconPickerField, SectionCard, Toggle } from "./components";
+import { PwaSettingsSection } from "./PwaSettingsSection";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { CreditCard, ShoppingCart, SlidersHorizontal, Smartphone, Wrench } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+const PWA_TAB = "pwa";
+
+// These pick from a fixed set of emoji, so they get an icon-grid picker instead
+// of a text pill row or a dropdown — see IconPickerField.
+const ICON_PICKER_FIELDS = new Set(["start_reaction_emoji", "start_effect_id"]);
+
+const sectionTitles = (t: TFunction): Record<string, string> => ({
+  core_settings: t("panel.settings.core"),
+  payment_settings: t("panel.settings.paymentsAndWallet"),
+  purchase_settings: t("panel.settings.buyAndRenew"),
+  service_tools_settings: t("panel.settings.serviceTools"),
+});
+
+const sectionIcons: Record<string, LucideIcon> = {
+  core_settings: SlidersHorizontal,
+  payment_settings: CreditCard,
+  purchase_settings: ShoppingCart,
+  service_tools_settings: Wrench,
+  [PWA_TAB]: Smartphone,
+};
+
+const labels = (t: TFunction): Record<string, string> => ({
+  bot_mode: t("panel.settings.botEnabled"),
+  sale_mode: t("panel.settings.salesEnabled"),
+  single_panel_buy_mode: t("panel.settings.singlePanelPurchase"),
+  channel_lock: t("panel.settings.channelLock"),
+  miniapp_mode: t("panel.settings.miniappMode"),
+  start_reaction_emoji: t("panel.settings.startReactionEmoji"),
+  start_effect_id: t("panel.settings.startEffectId"),
+  backup_interval_hours: t("panel.settings.backupInterval"),
+  profile_mode: t("panel.settings.showProfile"),
+  help_mode: t("panel.settings.showHelp"),
+  support_mode: t("panel.settings.showSupport"),
+  advanced_settings_mode: t("panel.settings.advancedUser"),
+  home_menu_inline_mode: t("panel.settings.homeMenuInlineMode"),
+  premium_emoji_status: t("panel.common.premiumEmoji"),
+  pay_mode: t("panel.settings.paymentEnabled"),
+  pay_phone_verify: t("panel.settings.phoneRequiredForPayment"),
+  arz_mode: t("panel.common.cryptoPayment"),
+  cart_sta: t("panel.settings.starsPaymentEnabled"),
+  manual_card_visibility: t("panel.settings.showManualCard"),
+  manual_auto_confirm: t("panel.common.autoApproveCardTransfer"),
+  manual_card_random_mode: t("panel.settings.randomCard"),
+  manual_deposit_min: t("panel.settings.manualMin"),
+  manual_deposit_max: t("panel.settings.manualMax"),
+  crypto_deposit_min: t("panel.settings.cryptoMin"),
+  crypto_deposit_max: t("panel.settings.cryptoMax"),
+  manual_bonus_enabled: t("panel.settings.manualTopUpBonus"),
+  manual_bonus_percent: t("panel.settings.manualBonusPercent"),
+  crypto_bonus_enabled: t("panel.settings.cryptoTopUpBonus"),
+  crypto_bonus_percent: t("panel.settings.cryptoBonusPercent"),
+  stars_bonus_enabled: t("panel.settings.starsTopUpBonus"),
+  stars_bonus_percent: t("panel.settings.starsBonusPercent"),
+  arz_usd: t("panel.settings.usdPrice"),
+  arz_trx: t("panel.settings.tronPrice"),
+  arz_ton: t("panel.settings.tonPrice"),
+  arz_pol: t("panel.settings.polPrice"),
+  extension_mode: t("panel.settings.renewService"),
+  upg_mode: t("panel.settings.serviceUpgrade"),
+  tamdid_mode: t("panel.settings.extraVolume"),
+  test_mode: t("panel.settings.trialService"),
+  test_panel_id: t("panel.settings.trialPanelCode"),
+  test_phone_verify: t("panel.settings.phoneRequiredForTrial"),
+  admin_unlimited_trial: t("panel.settings.adminUnlimitedTrial"),
+  direct_pay_purchase_mode: t("panel.settings.directBuy"),
+  direct_pay_renew_mode: t("panel.settings.directRenew"),
+  qr_mode: t("panel.settings.showQr"),
+  sub_mode: t("panel.settings.subLink"),
+  other_links_mode: t("panel.settings.otherLinks"),
+  client_list_mode: t("panel.settings.clientList"),
+  usage_chart_mode: t("panel.settings.usageChart"),
+  change_link_mode: t("panel.settings.changeLink"),
+  copy_link_mode: t("panel.settings.copyLink"),
+  transfer_config_mode: t("panel.settings.transferConfig"),
+  info_mode: t("panel.settings.serviceInfo"),
+  del_service_mode: t("panel.common.deleteService"),
+  api_key_login_mode: t("panel.settings.apiKeyLoginMode"),
+});
+
+export default function AdminSettingsPage() {
+  const { t } = useTranslation();
+  const [values, setValues] = useState<Record<string, PanelSettingValue> | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeSection, setActiveSectionState] = useState<string | null>(searchParams.get("section"));
+
+  const setActiveSection = (section: string) => {
+    setActiveSectionState(section);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("section", section);
+      return next;
+    });
+  };
+
+  const query = usePanelQuery(["settings"], (auth) => panelSettingsApi.getSettings(auth));
+  const save = usePanelAction(panelSettingsApi.saveSettings, { invalidate: [["settings"], ["keyboard"]] });
+
+  useEffect(() => {
+    if (!query.data || values !== null) return;
+    const next: Record<string, PanelSettingValue> = {};
+    for (const section of query.data.sections) {
+      for (const field of section.fields) next[field.key] = field.value;
+    }
+    setValues(next);
+  }, [query.data, values]);
+
+  // Re-runs on every navigation, not just the first load — so clicking a
+  // different section link in the sidebar (while already on this page)
+  // actually switches the active tab instead of being silently ignored.
+  useEffect(() => {
+    if (!query.data) return;
+    const validKeys = new Set([...query.data.sections.map((s) => s.key), PWA_TAB]);
+    const fromUrl = searchParams.get("section");
+    if (fromUrl && validKeys.has(fromUrl)) {
+      setActiveSectionState(fromUrl);
+      return;
+    }
+    // No (valid) section in the URL yet — landed here straight from the
+    // sidebar's parent link. Write the default section into the URL so the
+    // sidebar's own highlight (which matches on ?section=) picks it up too.
+    const defaultKey = query.data.sections[0]?.key ?? null;
+    setActiveSectionState(defaultKey);
+    if (defaultKey) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("section", defaultKey);
+        return next;
+      }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.data, searchParams]);
+
+  // Reseller settings moved to the reseller section; keep old links working.
+  if (searchParams.get("section") === "reseller_settings") {
+    return <Navigate to="/panel/resellers?tab=settings" replace />;
+  }
+  if (query.isError) {
+    return <ErrorState message={query.error.message} onRetry={() => void query.refetch()} />;
+  }
+  if (query.isLoading || !query.data || !values || !activeSection) {
+    return <Skeleton className="h-64 w-full" />;
+  }
+
+  const tabItems: TabItem[] = [
+    ...query.data.sections.map((item) => ({
+      value: item.key,
+      label: sectionTitles(t)[item.key] || item.key,
+      icon: sectionIcons[item.key],
+    })),
+    { value: PWA_TAB, label: t("panel.pwa.tab"), icon: sectionIcons[PWA_TAB] },
+  ];
+
+  if (activeSection === PWA_TAB) {
+    return (
+      <>
+        <PageHeader title={t("panel.common.botSettings")} />
+        <div className="mb-4">
+          <Tabs items={tabItems} value={PWA_TAB} onChange={(value) => setActiveSection(value)} />
+        </div>
+        <PwaSettingsSection />
+      </>
+    );
+  }
+
+  const section = query.data.sections.find((item) => item.key === activeSection) || query.data.sections[0];
+  if (!section) {
+    return <Skeleton className="h-64 w-full" />;
+  }
+
+  const saveSection = () => {
+    const sectionValues: Record<string, PanelSettingValue> = {};
+    for (const field of section.fields) {
+      if (!field.read_only) sectionValues[field.key] = values[field.key] ?? null;
+    }
+    save.mutate({ values: sectionValues });
+  };
+
+  const toggles = section.fields.filter((field) => field.type === "bool");
+  const selects = section.fields.filter((field) => field.type === "select");
+  const numbers = section.fields.filter((field) => field.type === "number" && !field.read_only);
+  const texts = section.fields.filter((field) => field.type === "text");
+  const readOnlyFields = section.fields.filter((field) => field.read_only);
+
+  return (
+    <>
+      <PageHeader
+        title={t("panel.common.botSettings")}
+        subtitle={query.data.initialized ? undefined : t("panel.settings.noRowYet")}
+      />
+
+      <div className="mb-4">
+        <Tabs items={tabItems} value={section.key} onChange={(value) => setActiveSection(value)} />
+      </div>
+
+      <SectionCard
+        title={sectionTitles(t)[section.key] || section.key}
+        actions={
+          <Button size="sm" loading={save.isPending} onClick={saveSection}>
+            {t("panel.settings.saveSection")}
+          </Button>
+        }
+      >
+        {toggles.length > 0 && (
+          <div className="grid gap-1 sm:grid-cols-2">
+            {toggles.map((field) => (
+              <Toggle
+                key={field.key}
+                checked={Boolean(values[field.key])}
+                onChange={(checked) => setValues({ ...values, [field.key]: checked })}
+                label={labels(t)[field.key] || field.key}
+              />
+            ))}
+          </div>
+        )}
+
+        {selects.length > 0 && (
+          <div className={`grid gap-3 sm:grid-cols-2 ${toggles.length ? "mt-4 border-t border-border pt-4" : ""}`}>
+            {selects.map((field) => {
+              const options = field.options || [];
+              const current = String(values[field.key] ?? options[0]?.value ?? "");
+              return (
+                <div key={field.key}>
+                  {ICON_PICKER_FIELDS.has(field.key) ? (
+                    <IconPickerField
+                      label={labels(t)[field.key] || field.key}
+                      value={current}
+                      onChange={(value) => setValues({ ...values, [field.key]: value })}
+                      options={options}
+                    />
+                  ) : (
+                    <>
+                      <span className="mb-1.5 block text-sm text-muted">{labels(t)[field.key] || field.key}</span>
+                      <SegmentedControl
+                        value={current}
+                        onChange={(value) => setValues({ ...values, [field.key]: value })}
+                        options={options}
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {numbers.length > 0 && (
+          <div
+            className={`grid gap-3 sm:grid-cols-2 ${
+              toggles.length || selects.length ? "mt-4 border-t border-border pt-4" : ""
+            }`}
+          >
+            {numbers.map((field) => (
+              <Input
+                key={field.key}
+                label={labels(t)[field.key] || field.key}
+                inputMode="numeric"
+                value={values[field.key] === null || values[field.key] === undefined ? "" : String(values[field.key])}
+                onChange={(event) =>
+                  setValues({
+                    ...values,
+                    [field.key]: event.target.value.trim() === "" ? null : Number(event.target.value),
+                  })
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {texts.length > 0 && (
+          <div
+            className={`grid gap-3 sm:grid-cols-2 ${
+              toggles.length || selects.length || numbers.length ? "mt-4 border-t border-border pt-4" : ""
+            }`}
+          >
+            {texts.map((field) => (
+              <Input
+                key={field.key}
+                label={labels(t)[field.key] || field.key}
+                value={values[field.key] === null || values[field.key] === undefined ? "" : String(values[field.key])}
+                onChange={(event) => setValues({ ...values, [field.key]: event.target.value })}
+              />
+            ))}
+          </div>
+        )}
+
+        {readOnlyFields.length > 0 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="mb-2 text-xs text-muted">{t("panel.settings.readOnlyHint")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {readOnlyFields.map((field) => (
+                <Input
+                  key={field.key}
+                  label={labels(t)[field.key] || field.key}
+                  value={values[field.key] === null || values[field.key] === undefined ? "" : String(values[field.key])}
+                  disabled
+                  readOnly
+                  className="cursor-not-allowed opacity-60"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+}

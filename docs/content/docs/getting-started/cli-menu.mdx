@@ -1,0 +1,355 @@
+---
+title: منوی مدیریت سرور
+description: راهنمای کامل همهٔ گزینه‌ها و دستورهای اسکریپت mdjebot
+icon: Terminal
+---
+
+بعد از نصب، کل مدیریت ربات روی سرور با یک دستور انجام می‌شود:
+
+```bash
+mdjebot
+```
+
+<CliPanel title="MdjeBot — manager">
+{`MdjeBot — manager v1.3.2
+
+  Manager script:  v1.3.2
+  Host OS:         Ubuntu 24.04 LTS
+  Install mode:    docker
+  Branch:          main
+  Bot version:     …
+  Bot runtime:     running (4/4 services running)
+  API port:        6160
+  Config:          /opt/mdjebot
+
+  ● Status: Installed (docker)
+
+  ┌─────────────────────────────────────────────┐
+  │   1) Install bot                            │
+  │   2) Uninstall bot                          │
+  │   3) Update bot                             │
+  │   4) View logs                              │
+  │   5) Edit .env file                         │
+  │   6) Edit docker-compose.yml                │
+  │   7) Full restart                           │
+  │   8) Service status                         │
+  │   9) Show webhook & URLs                    │
+  │  10) Update manager script                  │
+  │  11) Fix Docker network                     │
+  │  12) Get SSL certificate (AutoSSL)          │
+  │   0) Exit                                   │
+  └─────────────────────────────────────────────┘
+
+  Select an option: `}
+</CliPanel>
+
+بالای منو نسخهٔ اسکریپت، سیستم‌عامل، حالت نصب، برنچ، نسخهٔ ربات، وضعیت کانتینرها و پورت API نمایش داده می‌شود. در همهٔ سؤال‌های `(y/N)` زدن Enter یعنی **خیر** و در `(Y/n)` یعنی **بله**.
+
+---
+
+## ۱) Install bot — نصب [#install]
+
+حالت نصب (Docker؛ Native فعلاً غیرفعال است) و برنچ (`main` یا `dev`) را می‌پرسد و ربات را نصب می‌کند. اگر قبلاً نصب شده باشد:
+
+```text
+Continue (will keep existing .env and data)? (y/N):
+```
+
+با `y` ادامه می‌دهد؛ `.env` و دیتای قبلی دست نمی‌خورد. جزئیات کامل: [نصب](/docs/getting-started/install).
+
+---
+
+## ۲) Uninstall bot — حذف [#uninstall]
+
+<CliPanel title="Uninstall (Docker)">
+{`⚠  Uninstall MdjeBot (Docker)
+
+  1) Remove containers only (keep .env and data)
+  2) Remove containers + data (keep .env / config if present)
+  3) Full remove (/opt/mdjebot and /usr/local/bin/mdjebot)
+  0) Cancel
+Choice: `}
+</CliPanel>
+
+| گزینه | چه چیزی حذف می‌شود | چه چیزی می‌ماند | تأیید |
+|-------|-------------------|-----------------|-------|
+| `1` | فقط کانتینرها | `.env`، دیتابیس، لاگ‌ها | ندارد |
+| `2` | کانتینرها + پوشهٔ `/opt/mdjebot/data` (دیتابیس و Redis) | `.env` و تنظیمات | باید دقیقاً `yes` تایپ کنید |
+| `3` | همه‌چیز: کل `/opt/mdjebot`، دستور `mdjebot`، ایمیج ربات | هیچ | باید دقیقاً `yes` تایپ کنید |
+| `0` | — | — | انصراف |
+
+<Callout type="error" title="قبل از گزینهٔ 2 یا 3 بکاپ بگیرید">
+گزینه‌های `2` و `3` دیتابیس را برای همیشه پاک می‌کنند. اول از **📦 بکاپ ربات** یک بکاپ تازه بگیرید. [بکاپ و ریستور](/docs/admin/backup-restore)
+</Callout>
+
+در نصب Native (قدیمی) همین سه سطح با این عنوان‌ها هست: `Stop services only (keep .env, app, and data)`، `Stop services + delete data (keep .env / app / config)` و `Full remove (/opt/mdjebot, systemd units, and /usr/local/bin/mdjebot)`.
+
+---
+
+## ۳) Update bot — بروزرسانی [#update]
+
+```bash
+mdjebot update
+```
+
+<Steps>
+<Step>
+
+### انتخاب برنچ
+
+```text
+Select update branch
+
+  1) main  (recommended — latest stable)
+  2) dev   (testing only — may be unstable)
+  0) Cancel
+
+[*] Last used branch: main
+Choice [1]:
+```
+
+Enter = `main`. با همین مرحله می‌توانید بین `main` و `dev` جابه‌جا شوید.
+
+</Step>
+<Step>
+
+### آپدیت خود اسکریپت
+
+اول چک می‌کند نسخهٔ جدیدتری از اسکریپت مدیریت در آن برنچ هست یا نه. اگر بود، نصبش می‌کند و آپدیت را با نسخهٔ جدید ادامه می‌دهد (`Manager script updated — continuing with the latest version...`).
+
+</Step>
+<Step>
+
+### دانلود docker-compose.yml و ایمیج‌ها
+
+فایل `docker-compose.yml` از برنچ انتخابی **دوباره دانلود و جایگزین** می‌شود، `MDJEBOT_IMAGE_TAG` در `.env` طبق برنچ ست می‌شود (`main` ← `latest`، `dev` ← `dev`) و همهٔ ایمیج‌ها pull می‌شوند.
+
+</Step>
+<Step>
+
+### ساخت دوبارهٔ کانتینرها
+
+کانتینرها با `up -d --force-recreate` از نو ساخته می‌شوند و ایمیج‌های بلااستفادهٔ قدیمی پاک می‌شوند. ربات هنگام بالا آمدن **مایگریشن دیتابیس را خودکار** اجرا می‌کند؛ کار دستی لازم نیست.
+
+</Step>
+<Step>
+
+### لاگ زنده
+
+در پایان `Update complete (نسخهٔ قبلی → نسخهٔ جدید)` چاپ می‌شود و لاگ زنده نمایش داده می‌شود. وقتی دیدید ربات بالا آمد `Ctrl+C` بزنید.
+
+</Step>
+</Steps>
+
+<Callout type="warn" title="تغییرات دستی docker-compose.yml از بین می‌رود">
+هر آپدیت فایل compose را از گیت‌هاب بازنویسی می‌کند. `.env` و دیتا دست نمی‌خورند.
+</Callout>
+
+<Callout type="info" title="جابه‌جایی بین main و dev">
+برنچ `dev` برای تست است. قبل از رفتن به `dev` یا برگشتن از آن به `main` حتماً بکاپ بگیرید؛ ممکن است `dev` تغییرات دیتابیسی داشته باشد که هنوز در `main` نیامده.
+</Callout>
+
+---
+
+## ۴) View logs — لاگ‌ها [#logs]
+
+<CliPanel title="View logs (Docker)">
+{`  1) Bot logs
+  2) MariaDB logs
+  3) Redis logs
+  4) All services
+  5) Live bot logs (Ctrl+C to exit)
+  0) Back
+Choice: `}
+</CliPanel>
+
+| گزینه | خروجی |
+|-------|-------|
+| `1` | ۲۰۰ خط آخر لاگ ربات |
+| `2` | ۲۰۰ خط آخر MariaDB |
+| `3` | ۲۰۰ خط آخر Redis |
+| `4` | ۱۰۰ خط آخر همهٔ سرویس‌ها |
+| `5` | لاگ زندهٔ ربات؛ با `Ctrl+C` خارج شوید |
+
+در نصب Native گزینهٔ `4` به‌جای «All services»، `phpMyAdmin logs` است.
+
+دستور `mdjebot logs` مستقیم لاگ زندهٔ **همهٔ سرویس‌های در حال اجرا** را با زمان (۲۰۰ خط آخر و ادامه) نشان می‌دهد.
+
+لاگ‌های فایلی ربات هم در `/opt/mdjebot/logs/` هستند (`app.log` و `error.log`).
+
+---
+
+## ۵) Edit .env file — ویرایش تنظیمات [#edit-env]
+
+```bash
+mdjebot edit-env
+```
+
+فایل `/opt/mdjebot/.env` با `nano` (یا ادیتور تعریف‌شده در `$EDITOR`) باز می‌شود. بعد از بستن ادیتور:
+
+```text
+Restart the bot? (Y/n):
+```
+
+- **Enter** یا `Y`: ری‌استارت کامل (مثل گزینهٔ ۷) تا تغییرات اعمال شوند.
+- `n`: بدون ری‌استارت؛ تغییرات تا ری‌استارت بعدی اعمال نمی‌شوند.
+
+همهٔ متغیرها: [پیکربندی (.env)](/docs/getting-started/configuration).
+
+---
+
+## ۶) Edit docker-compose.yml [#edit-compose]
+
+```bash
+mdjebot edit
+```
+
+فایل `/opt/mdjebot/docker-compose.yml` را باز می‌کند. قبل از باز شدن هشدار می‌دهد:
+
+```text
+[!] This is a local edit — the next 'Update bot' will overwrite it with the upstream Compose file.
+```
+
+بعد از ذخیره، فایل اعتبارسنجی می‌شود (باید ایمیج `ghcr.io/mdjes/mdjebot` را داشته باشد و `build:` نداشته باشد) و می‌پرسد:
+
+```text
+Apply the changes now (docker compose up -d)? (Y/n):
+```
+
+فقط برای نصب Docker است.
+
+---
+
+## ۷) Full restart — ری‌استارت کامل [#restart]
+
+```bash
+mdjebot restart
+```
+
+به ترتیب: آخرین ایمیج ربات **pull** می‌شود (روی همان تگ فعلی)، همهٔ کانتینرها `down` و دوباره `up -d` می‌شوند، و لاگ زنده نمایش داده می‌شود.
+
+<Callout type="info">
+چون ایمیج ربات pull می‌شود، اگر روی تگ `latest` نسخهٔ جدیدی منتشر شده باشد، ری‌استارت هم ربات را به آن نسخه می‌برد. ولی فایل compose و اسکریپت را به‌روز نمی‌کند؛ برای آپدیت کامل از گزینهٔ ۳ استفاده کنید.
+</Callout>
+
+---
+
+## ۸) Service status — وضعیت سرویس‌ها [#status]
+
+```bash
+mdjebot status
+```
+
+وضعیت کانتینرها (`docker compose ps`)، مصرف CPU و RAM هر کانتینر، و در آخر همان خروجی گزینهٔ ۹ را نشان می‌دهد.
+
+---
+
+## ۹) Show webhook & URLs — وب‌هوک و آدرس‌ها [#urls]
+
+```bash
+mdjebot urls
+```
+
+<CliPanel title="Webhook & URLs">
+{`[*] Webhook (set in Pasarguard panel):
+  URL:     http://SERVER_IP:6160/api/webhook
+  Header:  x-webhook-secret: <from DB table secrets, name=webhook_secret>
+  Note:   crypto_key / webhook_secret are stored in DB (not .env)
+
+[*] phpMyAdmin:
+  URL:  http://SERVER_IP:6163
+
+[!] Replace the IP with your domain if you use one.`}
+</CliPanel>
+
+- آی‌پی عمومی سرور خودکار تشخیص داده می‌شود و پورت از `FASTAPI_PORT` خوانده می‌شود.
+- آدرس‌ها **همیشه با `http://`** چاپ می‌شوند. اگر SSL دارید، `https://` و دامنه را خودتان جایگزین کنید.
+- خود مقدار Secret چاپ **نمی‌شود**. در phpMyAdmin وارد دیتابیس `mdjebot` شوید، جدول `secrets` را باز کنید و مقدار `value` ردیف `webhook_secret` را کپی کنید (یوزر و رمز ورود phpMyAdmin در `.env`: `MARIADB_USER` / `MARIADB_PASSWORD`).
+
+راهنمای ست کردن در پنل: [اطلاع‌رسانی حجم و زمان](/docs/admin/panels/notifications).
+
+---
+
+## ۱۰) Update manager script — آپدیت اسکریپت مدیریت [#update-script]
+
+```bash
+mdjebot update-script
+```
+
+فقط خود اسکریپت `mdjebot` را از **برنچ ذخیره‌شده** (همان برنچی که نصب یا آخرین آپدیت با آن انجام شده) دوباره دانلود و نصب می‌کند. ربات را آپدیت نمی‌کند.
+
+- اگر نسخه یکی باشد: `Manager script is already up to date`.
+- اگر نسخهٔ جدید نصب شد: `Run mdjebot again to use the new script.` یک بار از منو خارج شوید و دوباره `mdjebot` را بزنید.
+
+اگر دستور `mdjebot` به هر دلیلی از سیستم حذف شده، همین گزینه دوباره ثبتش می‌کند.
+
+---
+
+## ۱۱) Fix Docker network — رفع مشکل شبکهٔ Docker [#docker-network]
+
+برای سرورهایی (به‌خصوص بعضی دیتاسنترها با Ubuntu) که یک فایل Netplan با الگوی wildcard دارند و شبکهٔ bridge داکر را خراب می‌کند. علامتش: کانتینرها به اینترنت یا به هم وصل نمی‌شوند، pull یا اتصال ربات به تلگرام/پنل خطا می‌دهد.
+
+<CliPanel title="Docker network">
+{`Docker network
+
+  1) Check Docker Bridge
+  2) Repair Docker Bridge
+  3) Rollback Netplan Repair
+  0) Back
+Choice: `}
+</CliPanel>
+
+| گزینه | کار |
+|-------|-----|
+| `1` Check | یک کانتینر تست (`alpine`) بالا می‌آورد و شبکهٔ bridge را آزمایش می‌کند. چیزی تغییر نمی‌کند |
+| `2` Repair | اگر تست شکست بخورد و فایل شناخته‌شدهٔ `/etc/netplan/99-custom.yaml` با wildcard پیدا شود، از آن بکاپ می‌گیرد، غیرفعالش می‌کند و Docker را ری‌استارت می‌کند. تأیید `Continue? [y/N]` می‌خواهد |
+| `3` Rollback | فایل Netplan غیرفعال‌شده را برمی‌گرداند. تأیید می‌خواهد |
+
+نکته‌ها:
+
+- **فقط روی Ubuntu** کار می‌کند؛ روی سیستم‌های دیگر پیام `Docker Bridge repair is supported only on Ubuntu.` می‌دهد. در نصب Native هم غیرفعال است.
+- اگر فایل حاوی تنظیمات حساس شبکه باشد یا اینترفیس اصلی جای دیگری تعریف نشده باشد، تعمیر برای جلوگیری از قطع شدن سرور **انجام نمی‌شود** (`Automatic repair was refused to keep the network safe.`).
+- بعد از تعمیر یا Rollback ممکن است بپرسد `Reboot the server now? [y/N]`. اگر نه، بعداً خودتان `reboot` کنید.
+- بکاپ‌ها در `/opt/mdjebot/backups/netplan/` ذخیره می‌شوند.
+
+---
+
+## ۱۲) Get SSL certificate (AutoSSL) [#ssl]
+
+```bash
+mdjebot ssl
+```
+
+ابزار [AutoSSL](https://github.com/AmirKenzo/Auto-SSL-Domain) را (اگر نصب نباشد) نصب و `autossl issue` را اجرا می‌کند تا گواهی Let's Encrypt بگیرید. با انتخاب مقصد **MdjeBot** گواهی در `/var/lib/mdjebot/certs/<دامنه>/` قرار می‌گیرد. راهنمای کامل: [دامنه و SSL](/docs/getting-started/ssl).
+
+---
+
+## ۰) Exit [#exit]
+
+با `0` یا `q` از منو خارج می‌شوید.
+
+---
+
+## میانبرهای خط فرمان [#shortcuts]
+
+بدون باز کردن منو:
+
+| دستور | معادل |
+|-------|-------|
+| `mdjebot` یا `mdjebot menu` | باز کردن منو |
+| `mdjebot install` | ۱) نصب |
+| `mdjebot uninstall` | ۲) حذف (با زیرمنو و تأیید) |
+| `mdjebot purge` | حذف کامل همه‌چیز، **بدون هیچ سؤال و تأییدی** |
+| `mdjebot update` | ۳) آپدیت ربات |
+| `mdjebot logs` | لاگ زندهٔ همهٔ سرویس‌ها |
+| `mdjebot edit-env` | ۵) ویرایش `.env` |
+| `mdjebot edit` | ۶) ویرایش docker-compose.yml |
+| `mdjebot restart` | ۷) ری‌استارت کامل |
+| `mdjebot status` | ۸) وضعیت سرویس‌ها |
+| `mdjebot urls` | ۹) وب‌هوک و آدرس‌ها |
+| `mdjebot update-script` | ۱۰) آپدیت اسکریپت |
+| `mdjebot ssl` | ۱۲) گرفتن SSL |
+
+<Callout type="error" title="purge هیچ تأییدی نمی‌خواهد">
+`mdjebot purge` بلافاصله همهٔ کانتینرها، کل پوشهٔ `/opt/mdjebot` (شامل **دیتابیس** و `.env`) و خود دستور `mdjebot` را پاک می‌کند و هر پروسه‌ای را که روی پورت‌های `6160` تا `6163` باشد می‌بندد. هیچ سؤالی نمی‌پرسد و قابل برگشت نیست. فقط وقتی استفاده کنید که از بکاپ مطمئن هستید.
+</Callout>
