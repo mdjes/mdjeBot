@@ -170,12 +170,22 @@ set_env_var() {
     fi
 }
 
+# The Bot Builder service is only part of the stack once BUILDER_BOT_TOKEN is set in .env.
+builder_enabled() {
+    [[ -f "$ENV_FILE" && -n "$(get_env_value BUILDER_BOT_TOKEN)" ]]
+}
+
 docker_compose() {
+    local -a profile_args=()
+    if builder_enabled; then
+        profile_args=(--profile builder)
+    fi
     if docker compose version &>/dev/null; then
         docker compose \
             --project-directory "$CONFIG_DIR" \
             -f "$COMPOSE_FILE" \
             --env-file "$ENV_FILE" \
+            ${profile_args[@]+"${profile_args[@]}"} \
             "$@"
     elif command -v docker-compose &>/dev/null; then
         warn "Using legacy docker-compose; prefer Docker Compose V2 (docker compose)."
@@ -183,6 +193,7 @@ docker_compose() {
             --project-directory "$CONFIG_DIR" \
             -f "$COMPOSE_FILE" \
             --env-file "$ENV_FILE" \
+            ${profile_args[@]+"${profile_args[@]}"} \
             "$@"
     else
         die "Docker Compose not found. Install Docker Compose V2 (docker compose) and retry."
@@ -1118,6 +1129,13 @@ draw_menu() {
         menu_row "11) Fix Docker network"
     fi
     menu_row "12) Get SSL certificate (AutoSSL)"
+    if [[ "$mode" == "native" ]]; then
+        menu_row "13) Bot Builder (Docker only)" dim
+    elif builder_enabled; then
+        menu_row "13) Bot Builder (enabled)"
+    else
+        menu_row "13) Bot Builder (enable / manage)"
+    fi
     menu_row " 0) Exit"
     menu_border "└" "┘"
     echo
@@ -1330,7 +1348,17 @@ wait_for_containers_healthy() {
 
 cleanup_stale_named_containers() {
     # Only remove known MdjeBot container names (not unrelated resources).
-    docker rm -f mdjebot-redis mdjebot-mariadb mdjebot-phpmyadmin mdjebot 2>/dev/null || true
+    docker rm -f mdjebot-redis mdjebot-mariadb mdjebot-phpmyadmin mdjebot mdjebot-builder 2>/dev/null || true
+}
+
+# Customer bots created by the Bot Builder are plain containers (not part of the compose project).
+remove_tenant_containers() {
+    local ids
+    ids="$(docker ps -aq --filter "label=mdjebot.managed=true" 2>/dev/null || true)"
+    if [[ -n "$ids" ]]; then
+        # shellcheck disable=SC2086
+        docker rm -f $ids >/dev/null 2>&1 || true
+    fi
 }
 
 prune_dangling_images_safe() {
@@ -2253,7 +2281,10 @@ purge_mdjebot_everything() {
     if [[ -f "$COMPOSE_FILE" ]] && command -v docker &>/dev/null; then
         docker_compose down --remove-orphans 2>/dev/null || true
     fi
-    docker rm -f mdjebot mdjebot-redis mdjebot-mariadb mdjebot-phpmyadmin 2>/dev/null || true
+    docker rm -f mdjebot mdjebot-redis mdjebot-mariadb mdjebot-phpmyadmin mdjebot-builder 2>/dev/null || true
+    if command -v docker &>/dev/null; then
+        remove_tenant_containers
+    fi
 
     # Kill anything still bound to our ports / leftover mysqld on our datadir
     if command -v fuser &>/dev/null; then
@@ -2514,7 +2545,8 @@ action_uninstall_docker() {
             else
                 cleanup_stale_named_containers
             fi
-            rm -rf "${CONFIG_DIR}/data"
+            remove_tenant_containers
+            rm -rf "${CONFIG_DIR}/data" "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder"
             ok "Containers and data removed. Config/.env kept if present."
             ;;
         3)
@@ -2627,6 +2659,10 @@ action_update_docker() {
 
     new_ver="$(get_installed_bot_version)"
     ok "Update complete (${old_ver} → ${new_ver}) [branch=${branch}, image=$(get_bot_image_tag)]."
+    if builder_enabled; then
+        info "Customer bots keep running the previous image until you update them:"
+        info "open the builder bot → Admin panel → Server → Update all bots."
+    fi
 }
 
 action_update_native() {
@@ -3000,6 +3036,111 @@ action_urls() {
     pause
 }
 
+# ── Bot Builder (multi-bot platform, Docker only) ─────────────────────────────
+generate_fernet_key() {
+    openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n'
+}
+
+builder_prepare_files() {
+    mkdir -p "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder"
+    chmod 700 "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder" 2>/dev/null || true
+}
+
+builder_configure() {
+    local token admin_id main_token current_admin
+    main_token="$(get_env_value BOT_TOKEN)"
+    current_admin="$(get_env_value BUILDER_ADMIN_ID)"
+    echo
+    info "The Bot Builder runs as its own bot — create a NEW bot in @BotFather for it."
+    token="$(prompt_required "BUILDER_BOT_TOKEN" "  Builder BOT_TOKEN")"
+    [[ "$token" != "$main_token" ]] || die "Use a different bot token than the main bot."
+    admin_id="$(prompt_with_default "  Builder admin ID(s), comma separated" "${current_admin:-$(get_env_value ADMIN_ID)}")"
+    [[ "$admin_id" =~ ^[0-9]+(,[0-9]+)*$ ]] || die "Admin IDs must be numeric, separated by commas."
+
+    set_env_var "$ENV_FILE" "BUILDER_BOT_TOKEN" "$token"
+    set_env_var "$ENV_FILE" "BUILDER_ADMIN_ID" "$admin_id"
+    if [[ -z "$(get_env_value BUILDER_SECRET_KEY)" ]]; then
+        set_env_var "$ENV_FILE" "BUILDER_SECRET_KEY" "$(generate_fernet_key)"
+    fi
+    chmod 600 "$ENV_FILE"
+    ok "Builder settings saved to ${ENV_FILE}"
+}
+
+builder_start() {
+    # An older downloaded compose file may not know the builder service yet.
+    if ! grep -q 'container_name: mdjebot-builder' "$COMPOSE_FILE" 2>/dev/null; then
+        info "Refreshing docker-compose.yml to include the Bot Builder service..."
+        setup_compose "$(get_repo_branch)"
+    fi
+    builder_prepare_files
+    pull_images
+    info "Starting the Bot Builder..."
+    docker_compose up -d builder || die "Could not start the builder. Check: docker logs mdjebot-builder"
+    sleep 5
+    if [[ "$(get_container_state mdjebot-builder)" == "running" ]]; then
+        ok "Bot Builder is running. Open your builder bot in Telegram and send /start (admins also get /admin)."
+    else
+        warn "The builder container is not running yet. Check: docker logs mdjebot-builder"
+    fi
+}
+
+action_builder() {
+    local choice
+    draw_banner
+    is_installed || die "Install the bot first (option 1)."
+    is_docker_mode || die "The Bot Builder needs the Docker install mode."
+    command -v docker &>/dev/null || die "Docker is not installed."
+
+    if ! builder_enabled; then
+        echo -e "${C_BOLD}  Bot Builder${C_RESET}"
+        echo "  A Telegram bot where users create and manage their own MdjeBot"
+        echo "  (just a bot token + admin ID), with plans, wallet and card-to-card payments."
+        echo
+        warn "The builder controls Docker on this server (it mounts /var/run/docker.sock)."
+        read -r -p "Enable the Bot Builder now? (y/N): " choice || true
+        [[ "${choice,,}" == "y" ]] || return 0
+        builder_configure
+        builder_start
+        pause
+        return 0
+    fi
+
+    echo -e "${C_BOLD}  Bot Builder${C_RESET} — ${C_GREEN}enabled${C_RESET} ($(get_container_state mdjebot-builder))"
+    echo
+    echo "  1) Restart builder"
+    echo "  2) View builder logs"
+    echo "  3) Change builder token / admin IDs"
+    echo "  4) Disable builder (customer bots keep running)"
+    echo "  0) Back"
+    echo
+    read -r -p "Choice: " choice || true
+    case "$choice" in
+        1)
+            docker_compose restart builder
+            ok "Builder restarted."
+            ;;
+        2)
+            docker logs --tail 200 mdjebot-builder 2>&1 || true
+            ;;
+        3)
+            builder_configure
+            builder_start
+            ;;
+        4)
+            read -r -p "Stop and remove the builder service? Customer bots are not touched. (y/N): " choice || true
+            if [[ "${choice,,}" == "y" ]]; then
+                docker_compose stop builder || true
+                docker_compose rm -f builder || true
+                # Clearing the token switches the compose profile off.
+                set_env_var "$ENV_FILE" "BUILDER_BOT_TOKEN" ""
+                ok "Builder disabled. Re-enable it from this menu any time (data is kept)."
+            fi
+            ;;
+        *) return 0 ;;
+    esac
+    pause
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 main_menu() {
     while true; do
@@ -3018,6 +3159,7 @@ main_menu() {
             10) action_update_script ;;
             11) action_docker_network ;;
             12) action_ssl ;;
+            13) action_builder ;;
             0|q|Q) draw_banner; ok "Goodbye!"; exit 0 ;;
             *) warn "Invalid option."; sleep 1 ;;
         esac
@@ -3042,11 +3184,12 @@ case "${1:-}" in
     edit)           action_edit_compose ;;
     edit-env)       action_edit_env ;;
     ssl)            action_ssl ;;
+    builder)        action_builder ;;
     # Internal: re-exec target after `update` refreshes the manager script.
     __continue-update) draw_banner; run_update_for_branch "${2:-main}" ;;
     ""|menu)        main_menu ;;
     *)
-        echo "Usage: mdjebot [install|uninstall|purge|update|update-script|logs|restart|status|urls|edit|edit-env|ssl|menu]"
+        echo "Usage: mdjebot [install|uninstall|purge|update|update-script|logs|restart|status|urls|edit|edit-env|ssl|builder|menu]"
         exit 1
         ;;
 esac

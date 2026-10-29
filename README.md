@@ -21,6 +21,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/mdjes/MdjeBot/main/scripts/m
 
 بعد از نصب: `mdjebot`
 
+## ربات‌ساز (Bot Builder)
+
+یک ربات تلگرامی جدا که کاربران با **توکن ربات** و **آیدی عددی ادمین**، ربات فروش اختصاصی خودشان را می‌سازند. هر ربات در کانتینر Docker مستقل (با دیتابیس و Redis جدا) اجرا می‌شود و ربات‌ساز پنل ادمین کامل، اشتراک ماهانه، کیف پول، کارت‌به‌کارت، کد تخفیف و تست رایگان دارد.
+
+از همان اسکریپت نصب فعال می‌شود: `mdjebot` ← گزینهٔ **13) Bot Builder**. راهنمای کامل: [مستندات ربات‌ساز](https://mdjes.github.io/MdjeBot/docs/builder) و کد در [`builder/`](builder/).
+
 ## وب‌اپ (Telegram Mini App)
 
 یک پنل کاربری وب برای مشتریان (مشاهده سرویس‌ها، تمدید، شارژ کیف پول) در مسیر [`frontend/`](frontend/) قرار دارد. برای راه‌اندازی و بیلد به [`frontend/README.md`](frontend/README.md) مراجعه کنید؛ در بیلد Docker به‌صورت خودکار ساخته می‌شود.

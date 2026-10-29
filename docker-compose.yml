@@ -26,6 +26,7 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
+      - --max-connections=500
     ports:
       - "127.0.0.1:6162:3306"
     volumes:
@@ -80,6 +81,32 @@ services:
         condition: service_healthy
     ports:
       - "${FASTAPI_PORT:-6160}:${FASTAPI_PORT:-6160}"
+    networks:
+      - mdjebot
+
+  # Bot Builder: a Telegram bot that creates/hosts customer MdjeBot instances as sibling containers.
+  # Only started when BUILDER_BOT_TOKEN is set (the manager script enables the "builder" profile).
+  builder:
+    image: ghcr.io/mdjes/mdjebot:${MDJEBOT_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: mdjebot-builder
+    profiles: ["builder"]
+    restart: unless-stopped
+    entrypoint: []
+    command: ["uv", "run", "builder_main.py"]
+    env_file:
+      - ${MDJEBOT_CONFIG_DIR:-.}/.env
+    volumes:
+      - ${MDJEBOT_CONFIG_DIR:-/opt/mdjebot}/.env:/app/.env:ro
+      - ${MDJEBOT_CONFIG_DIR:-/opt/mdjebot}/builder:/app/builder_data
+      # Same path inside and outside, so `docker run -v` paths resolve on the host.
+      - ${MDJEBOT_CONFIG_DIR:-/opt/mdjebot}/tenants:${MDJEBOT_CONFIG_DIR:-/opt/mdjebot}/tenants
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mdjebot
 

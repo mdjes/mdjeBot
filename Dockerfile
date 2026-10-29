@@ -33,6 +33,9 @@ RUN apt-get update \
 # Pin uv so this layer is stable across builds (avoid :latest digest churn).
 COPY --from=ghcr.io/astral-sh/uv:0.11.31 /uv /uvx /bin/
 
+# Docker CLI only (no daemon): the Bot Builder service drives the host Docker through /var/run/docker.sock.
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
+
 # Dependency layer: only invalidated when lock/metadata change.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,id=mdjebot-uv,target=/root/.cache/uv \

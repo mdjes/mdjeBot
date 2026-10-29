@@ -11,6 +11,8 @@ Modifications by Mdje (2026):
     session files from "PasarguardBot" to "MdjeBot".
   - Replaced branding, links, support/contact details and descriptions with
     those of Mdje.
+  - Added the Bot Builder (builder/, builder_main.py, docker-compose service
+    "builder"): a Telegram bot that provisions and bills customer bot instances.
 
 The original LICENSE text, including the Licensor notice and the Commons
 Clause condition, is kept unchanged in the LICENSE file and continues to
