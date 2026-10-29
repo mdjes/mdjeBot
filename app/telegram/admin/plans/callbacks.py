@@ -752,9 +752,7 @@ async def inline_callback(event: events.CallbackQuery.Event):
 
         if time_msg_id:
             try:
-                await Mdje.edit_message(
-                    user_id, int(time_msg_id), message_text, buttons=buttons, parse_mode="markdown"
-                )
+                await Mdje.edit_message(user_id, int(time_msg_id), message_text, buttons=buttons, parse_mode="markdown")
             except Exception:
                 # If edit fails, send new message
                 sent_msg = await Mdje.send_message(user_id, message_text, buttons=buttons, parse_mode="markdown")
