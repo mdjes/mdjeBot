@@ -8,13 +8,16 @@ from telethon.tl.custom import Message
 from app import Mdje
 from app.db.crud.keyboards import get_button_text
 from app.db.crud.log_channels import LogChannelManager
+from app.logger import get_logger
 from app.telegram.keyboards.admin import DOCS_URL, Panel_Admin_Buttons
 from app.telegram.keyboards.common import is_keyboard_config_step
 from app.telegram.plugins import PluginContext
 from app.telegram.shared.url_presets import format_admin_links_message, get_bot_username
 from app.telegram.state import get_step, set_step
-from app.telegram.state.store import clear_user_conversation
+from app.telegram.state.store import clear_user_conversation, get_app_cache, set_app_cache
 from config import ADMIN_ID, LOG_CHANNEL
+
+logger = get_logger(__name__)
 
 MODULE_NAME = "admin.admin_home"
 MODULE_REQUIRED = True
@@ -62,8 +65,22 @@ def _admin_home_message(user_id: int, username: str | None, *, setup_warning: st
     return message
 
 
+async def _drop_old_reply_keyboard(user_id: int) -> None:
+    """The panel used to be a reply keyboard; remove it once, now that the menu sits under the message."""
+    key = f"admin_menu_inline:{user_id}"
+    if await get_app_cache(key):
+        return
+    try:
+        stale = await Mdje.send_message(entity=user_id, message="⏳", buttons=Button.clear())
+        await stale.delete()
+    except Exception as exc:
+        logger.debug("Could not clear the old admin keyboard for %s: %s", user_id, exc)
+    await set_app_cache(key, "1")
+
+
 async def send_admin_home(user_id: int, username: str | None = None) -> None:
     await set_step(user_id=user_id, step="panel")
+    await _drop_old_reply_keyboard(user_id)
 
     setup_warning = None
     if LOG_CHANNEL is None:

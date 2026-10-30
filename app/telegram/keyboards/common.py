@@ -93,6 +93,13 @@ def extract_custom_emoji_document_id(message) -> int | None:
     return None
 
 
+_TELEGRAM_COLOURS = {
+    "primary": {"bg_primary": True},
+    "danger": {"bg_danger": True},
+    "success": {"bg_success": True},
+}
+
+
 def split_button_label(message) -> tuple[str, int | None]:
     """A typed button name and the first animated (custom) emoji in it.
 
@@ -117,18 +124,14 @@ def split_button_label(message) -> tuple[str, int | None]:
 
 
 def build_telegram_button_style(style: str | None, icon: int | None):
-    if style and style not in ("primary", "danger", "success"):
-        return None
+    """The Telegram style for a stored colour and icon.
 
+    Only primary/danger/success are Telegram colours; other values ("glass", "none") draw no colour but
+    must not take the animated-emoji icon down with them.
+    """
     style_kwargs = {}
-    if style:
-        style_kwargs.update(
-            {
-                "primary": {"bg_primary": True},
-                "danger": {"bg_danger": True},
-                "success": {"bg_success": True},
-            }[style]
-        )
+    if style in _TELEGRAM_COLOURS:
+        style_kwargs.update(_TELEGRAM_COLOURS[style])
     if icon is not None:
         style_kwargs["icon"] = int(icon)
     return KeyboardButtonStyle(**style_kwargs) if style_kwargs else None

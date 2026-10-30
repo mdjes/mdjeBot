@@ -7,7 +7,7 @@ import contextvars
 from types import SimpleNamespace
 
 import pytest
-from telethon import Button
+from telethon import Button, events
 from telethon.tl.types import MessageEntityCustomEmoji
 
 from app.db.crud import keyboards as keyboards_crud
@@ -265,3 +265,123 @@ def test_settings_menu_navigation_buttons_are_glass() -> None:
     assert all(b.text.startswith(GLASS_LEFT) and b.text.endswith(GLASS_RIGHT) for b in buttons)
     rich = settings_keyboards._settings_rich_home_button()
     assert rich.text.text == glass_text("🏠 فهرست بخش‌ها")
+
+
+# --- the menu is made of glass (inline) buttons ------------------------------------------------------------
+
+
+def _inline_buttons(menu: list[list]) -> list:
+    return [button for row in menu for button in row]
+
+
+def test_the_admin_menu_is_inline_with_a_callback_per_button() -> None:
+    from telethon.tl.types import InlineButtonTypeCallback, InlineButtonTypeUrl, KeyboardInlineButton
+
+    buttons = _inline_buttons(Panel_Admin_Buttons)
+    assert all(isinstance(button, KeyboardInlineButton) for button in buttons)
+    callbacks = {b.type.data.decode() for b in buttons if isinstance(b.type, InlineButtonTypeCallback)}
+    assert "adm:ad.gateway" in callbacks and "adm:ad.gifts" in callbacks and "adm:ad.home" in callbacks
+    # The docs button opens a link; it never sends a label.
+    assert any(isinstance(b.type, InlineButtonTypeUrl) for b in buttons)
+    assert all(len(data.encode()) <= 64 for data in callbacks)
+
+
+def test_sub_menus_are_inline_too() -> None:
+    from telethon.tl.types import KeyboardInlineButton
+
+    from app.telegram.keyboards.admin import BT_takhfifList, Home_Back, panel_xui_buttons
+
+    for menu in (BT_takhfifList, Home_Back, panel_xui_buttons, panel_back):
+        assert all(isinstance(button, KeyboardInlineButton) for button in _inline_buttons(menu))
+
+
+def test_a_callback_stands_for_the_plain_label() -> None:
+    item = admin_menu.item_for_callback(b"adm:ad.backup")
+    assert item is not None and item.label == "📦 بکاپ ربات"
+    assert admin_menu.item_for_callback("adm:ad.backup") is item
+    assert admin_menu.item_for_callback(b"adm:nope") is None
+    assert admin_menu.item_for_callback(b"other") is None
+    assert admin_menu.item_for_callback(None) is None
+    # Links and web views are opened by Telegram, never sent back as a label.
+    assert admin_menu.item_for_callback(b"adm:ad.docs") is None
+    assert admin_menu.item_for_callback(b"adm:ad.web_panel") is None
+
+
+def test_an_icon_survives_the_glass_style(menus) -> None:
+    from app.telegram.keyboards.common import build_telegram_button_style
+
+    assert build_telegram_button_style("glass", 77).icon == 77
+    assert build_telegram_button_style("glass", None) is None
+    assert build_telegram_button_style("", 77).icon == 77
+    coloured = build_telegram_button_style("success", 77)
+    assert coloured.bg_success and coloured.icon == 77
+
+
+class _MenuEvent:
+    def __init__(self, data: bytes, sender_id: int = 7) -> None:
+        self.data = data
+        self.sender_id = sender_id
+        self.answers: list[tuple] = []
+
+    async def answer(self, *args, **kwargs):
+        self.answers.append((args, kwargs))
+
+
+def test_pressing_a_menu_button_goes_to_the_panel_and_runs_its_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.telegram.admin import menu_press
+
+    log = SimpleNamespace(steps=[], pressed=[])
+
+    async def set_step(user_id, step, ttl=None):
+        log.steps.append((user_id, step))
+
+    async def dispatch_text(client, event, text):
+        log.pressed.append(text)
+
+    monkeypatch.setattr(menu_press, "ADMIN_ID", [7])
+    monkeypatch.setattr(menu_press, "set_step", set_step)
+    monkeypatch.setattr(menu_press, "dispatch_text", dispatch_text)
+
+    event = _MenuEvent(b"adm:ad.logs")
+    with pytest.raises(events.StopPropagation):
+        asyncio.run(menu_press.on_menu_button(event))
+    assert log.steps == [(7, "panel")] and log.pressed == ["📝 مدیریت لاگ‌ها"]
+    assert event.answers == [((), {})]
+
+
+def test_a_non_admin_cannot_press_the_menu(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.telegram.admin import menu_press
+
+    called = []
+
+    async def dispatch_text(client, event, text):
+        called.append(text)
+
+    monkeypatch.setattr(menu_press, "ADMIN_ID", [7])
+    monkeypatch.setattr(menu_press, "dispatch_text", dispatch_text)
+    event = _MenuEvent(b"adm:ad.logs", sender_id=99)
+    with pytest.raises(events.StopPropagation):
+        asyncio.run(menu_press.on_menu_button(event))
+    assert called == [] and event.answers[0][1] == {"alert": True}
+
+
+def test_dispatch_text_reaches_message_handlers_as_a_typed_message() -> None:
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+
+    from app.telegram.shared.utils.press import dispatch_text
+
+    async def run():
+        client = TelegramClient(StringSession(), 1, "hash")
+        client._mb_entity_cache.set_self_user(1, False, 1)
+        seen = []
+
+        @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
+        async def handler(event):
+            seen.append((event.raw_text, event.message.text, event.sender_id, event.chat_id, event.id, event.out))
+
+        callback = SimpleNamespace(sender_id=555, original_update=SimpleNamespace(msg_id=42))
+        await dispatch_text(client, callback, "🏠")
+        return seen
+
+    assert asyncio.run(run()) == [("🏠", "🏠", 555, 555, 42, False)]

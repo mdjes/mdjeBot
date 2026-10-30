@@ -1,9 +1,13 @@
-"""The admin panel's menus: glassy by default, renamable, with animated-emoji icons.
+"""The admin panel's menus: glass buttons under the message, renamable, with animated-emoji icons.
 
-The admin handlers match a press against the *plain* label ("💳 تنظیمات درگاه"). What the admin sees can
-differ from it (glass brackets, a new name from the keyboard manager), so every press is translated back
-to the plain label by ``restore_press`` before any handler runs. Labels, colour and icon live in the same
-``keyboard_buttons`` table as the home menu, under the ``ad.*`` keys.
+The menus are inline ("glass") keyboards. A button carries the callback ``adm:<key>``; pressing it is
+handled as if the admin had typed the button's plain label ("💳 تنظیمات درگاه"), which is what the admin
+handlers match on (see ``app.telegram.admin.menu_press``), so the name an admin gives a button never
+reaches them. Labels, colour and icon live in the same ``keyboard_buttons`` table as the home menu, under
+the ``ad.*`` keys.
+
+``restore_press`` still turns a typed or reply-keyboard press of a renamed/bracketed label back into the
+plain one, for admins whose chat still shows the old reply keyboard.
 
 The menus are module-level lists that dozens of call sites import by name, so a rebuild rewrites them in
 place instead of binding new lists.
@@ -22,11 +26,11 @@ from app.utils.admin_buttons import ADMIN_ITEMS, MENU_LAYOUTS, AdminItem
 from app.utils.text.glass import GLASS_STYLE, glass_text, unglass_text
 from config import WEBAPP_URL
 
-from .common import build_telegram_button_style, styled_simple_webview_button
+from .common import build_telegram_button_style, styled_callback_button, styled_url_button, styled_webview_button
 
 WEB_PANEL_URL = f"{WEBAPP_URL.rstrip('/')}?panel=1" if WEBAPP_URL.startswith("https://") else ""
 
-_TELEGRAM_STYLES = ("primary", "success", "danger")
+CALLBACK_PREFIX = "adm:"
 
 # A step with this prefix is a short admin form; pressing any admin menu button ends it (back to the panel).
 CANCELLABLE_STEP_PREFIX = "form_"
@@ -42,12 +46,21 @@ def _visible_keys(menu: str) -> list[list[str]]:
     return rows
 
 
+def item_for_callback(data: bytes | str | None) -> AdminItem | None:
+    """The menu button a callback ``adm:<key>`` stands for, if it is one that sends a label."""
+    text = data.decode("utf-8", "replace") if isinstance(data, bytes) else (data or "")
+    item = ADMIN_ITEMS.get(text.removeprefix(CALLBACK_PREFIX)) if text.startswith(CALLBACK_PREFIX) else None
+    return item if item is not None and not item.url and item.key != "ad.web_panel" else None
+
+
 def _button(item: AdminItem, text: str, style: str | None = None, icon: int | None = None):
+    telegram_style = build_telegram_button_style(style, icon)
+    if item.key == "ad.web_panel":
+        # An inline web-view signs the admin in to the web panel by itself.
+        return styled_webview_button(text, WEB_PANEL_URL, telegram_style)
     if item.url:
-        return styled_simple_webview_button(text, item.url, build_telegram_button_style(style, icon))
-    # A web-view opened from the reply keyboard gets no Telegram sign-in, so the web panel is a plain
-    # button here; pressing it answers with an inline web-view button.
-    return Button.text(text, resize=True, style=style if style in _TELEGRAM_STYLES else None, icon=icon)
+        return styled_url_button(text, item.url, telegram_style)
+    return styled_callback_button(text, f"{CALLBACK_PREFIX}{item.key}", telegram_style)
 
 
 def _rows_for(menu: str, resolve) -> list[list]:
