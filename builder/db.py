@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import inspect, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -43,7 +43,16 @@ async def ensure_mysql_database(url: str) -> None:
     database = parsed.database
     if not database.replace("_", "").isalnum():
         raise ValueError(f"unsafe database name: {database!r}")
-    server_engine = create_async_engine(parsed.set(database=None))
+    # URL.set(database=None) keeps the old database, so build the server-level URL explicitly.
+    server_url = URL.create(
+        parsed.drivername,
+        username=parsed.username,
+        password=parsed.password,
+        host=parsed.host,
+        port=parsed.port,
+        query=parsed.query,
+    )
+    server_engine = create_async_engine(server_url)
     try:
         async with server_engine.begin() as conn:
             await conn.execute(
