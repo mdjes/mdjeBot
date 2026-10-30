@@ -3,6 +3,7 @@
 from telethon import Button
 
 from app.db.crud.keyboards import KeyboardButtonCRUD
+from app.db.crud.settings import SettingsManager
 from app.services.payments.ir_gateways.providers import GATEWAYS
 from app.utils.admin_buttons import manager_groups
 
@@ -286,6 +287,10 @@ async def create_keyboard_buttons_admin_buttons(page: int = 1):
             buttons.append([Button.inline(f"📋 ━━━━ {heading} ━━━━", data="no_action")])
             for keys in rows:
                 buttons.append([await _keyboard_admin_button(keyboard_crud, key, 6) for key in keys])
+        settings = await SettingsManager().get_settings()
+        glass_enabled = bool(getattr(settings, "admin_menu_glass_mode", True)) if settings else True
+        status = "✅ فعال" if glass_enabled else "❌ غیرفعال"
+        buttons.append([Button.inline(f"🧱 قاب شیشه‌ای دکمه‌های ادمین: {status}", data="admin_menu_glass_toggle:6")])
         buttons.append([Button.inline("⬅️ صفحه قبلی", data="keyboard_page:5")])
 
     buttons.append([Button.inline("🔙 بازگشت به پنل", data="back_to_admin_panel")])

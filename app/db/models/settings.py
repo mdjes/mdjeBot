@@ -21,6 +21,7 @@ DEFAULT_CORE_SETTINGS: dict[str, Any] = {
     "sale_mode": False,
     "single_panel_buy_mode": False,
     "channel_lock": False,
+    "admin_menu_glass_mode": True,
     "miniapp_mode": "off",
     "miniapp_only_mode": False,
     # The reaction the bot leaves on /start, and the effect it sends the welcome

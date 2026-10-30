@@ -1,4 +1,4 @@
-"""The admin panel's menus: glass buttons under the message, renamable, with animated-emoji icons.
+"""The admin panel's inline menus: optionally glass-boxed, renamable, with animated-emoji icons.
 
 The menus are inline ("glass") keyboards. A button carries the callback ``adm:<key>``; pressing it is
 handled as if the admin had typed the button's plain label ("💳 تنظیمات درگاه"), which is what the admin
@@ -22,8 +22,9 @@ from functools import wraps
 from telethon import Button
 
 from app.db.crud.keyboards import KeyboardButtonCRUD, keyboard_cache_version
+from app.db.crud.settings import SettingsManager
 from app.utils.admin_buttons import ADMIN_ITEMS, MENU_LAYOUTS, AdminItem
-from app.utils.text.glass import GLASS_STYLE, glass_text, unglass_text
+from app.utils.text.glass import glass_text, unglass_text
 from config import WEBAPP_URL
 
 from .common import build_telegram_button_style, styled_callback_button, styled_url_button, styled_webview_button
@@ -80,12 +81,13 @@ def _default(item: AdminItem) -> tuple[str, str | None, int | None]:
 
 
 def _from_row(item: AdminItem, row) -> tuple[str, str | None, int | None]:
-    """(text, telegram style, icon) for one button given its stored row, or the glass default."""
+    """(text, telegram style, icon) for one button and the global glass setting."""
     text = ((row.button_text if row else "") or "").strip() or item.label
     stored_style = row.button_style if row else None
-    # Glass is the default look; an explicit colour (or "none") shows the stored text as it is.
-    if stored_style is None or stored_style == GLASS_STYLE:
+    if _admin_glass_enabled:
         text = glass_text(unglass_text(text))
+    else:
+        text = unglass_text(text)
     return text, stored_style, (row.button_icon if row else None)
 
 
@@ -95,6 +97,8 @@ MENUS: dict[str, list[list]] = {name: _rows_for(name, _default) for name in MENU
 _current: dict[str, str] = {}
 _history: dict[str, str] = {}
 _built_version = -1
+_built_glass_enabled: bool | None = None
+_admin_glass_enabled = True
 
 
 def _remember(text: str, label: str) -> None:
@@ -113,10 +117,13 @@ _seed_defaults()
 
 async def ensure_admin_menus() -> None:
     """Rebuild the menus from the stored buttons when they changed since the last build."""
-    global _built_version
+    global _admin_glass_enabled, _built_glass_enabled, _built_version
+    settings = await SettingsManager().get_settings()
+    glass_enabled = bool(getattr(settings, "admin_menu_glass_mode", True)) if settings else True
     version = keyboard_cache_version()
-    if version == _built_version:
+    if version == _built_version and glass_enabled == _built_glass_enabled:
         return
+    _admin_glass_enabled = glass_enabled
     stored = await KeyboardButtonCRUD().get_buttons_by_keys(list(ADMIN_ITEMS))
     _current.clear()
     _seed_defaults()
@@ -129,6 +136,7 @@ async def ensure_admin_menus() -> None:
     for name in MENUS:
         MENUS[name][:] = _rows_for(name, resolve)
     _built_version = version
+    _built_glass_enabled = glass_enabled
 
 
 def restore_press(text: str | None) -> str | None:
@@ -174,7 +182,9 @@ def _glassy(factory):
     @wraps(factory)
     def wrapper(text, *args, **kwargs):
         if _admin_view.get() and isinstance(text, str) and text.strip():
-            text = glass_text(unglass_text(text))
+            text = unglass_text(text)
+            if _admin_glass_enabled:
+                text = glass_text(text)
         return factory(text, *args, **kwargs)
 
     wrapper._glassy = True

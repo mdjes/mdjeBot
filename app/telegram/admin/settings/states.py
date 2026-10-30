@@ -14,6 +14,7 @@ SETTINGS_CALLBACK_PREFIXES = (
     "keyboard_btn_color:",
     "keyboard_btn_icon:",
     "keyboard_btn_icon_clear:",
+    "admin_menu_glass_toggle:",
     "keyboard_page:",
     "text_sections_page:",
     "text_section:",

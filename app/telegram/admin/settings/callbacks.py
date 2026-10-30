@@ -11,6 +11,7 @@ from app.db.crud.settings import SettingsManager
 from app.logger import get_logger
 from app.services.telegram.rich_message import edit_native_rich_message
 from app.telegram.admin.settings import states, texts
+from app.telegram.keyboards.admin_menu import ensure_admin_menus
 from app.telegram.keyboards.customization import (
     create_keyboard_button_config_view,
     create_keyboard_buttons_admin_buttons,
@@ -143,6 +144,28 @@ def settings_admin_callback_filter(event: events.CallbackQuery.Event) -> bool:
 
 async def callback_settings_admin(event: events.CallbackQuery.Event):
     data = event.data.decode("utf-8")
+
+    if data.startswith("admin_menu_glass_toggle:"):
+        try:
+            page = max(1, min(int(data.split(":", 1)[1]), 6))
+        except (TypeError, ValueError):
+            await event.answer("❌ درخواست نامعتبر است.", alert=True)
+            return
+        settings = await SettingsManager().get_settings()
+        if not settings:
+            await event.answer("❌ تنظیمات ربات پیدا نشد.", alert=True)
+            return
+        new_value = not bool(getattr(settings, "admin_menu_glass_mode", True))
+        saved = await SettingsManager().update_setting(settings.id, admin_menu_glass_mode=new_value)
+        if not saved:
+            await event.answer("❌ ذخیره تنظیمات انجام نشد.", alert=True)
+            return
+        await ensure_admin_menus()
+        await event.answer(f"قاب شیشه‌ای دکمه‌های ادمین {'فعال' if new_value else 'غیرفعال'} شد.")
+        title = f"⌨️ یکی از دکمه‌های کیبورد را برای ویرایش انتخاب کنید:\n\n{texts.KEYBOARD_PAGE_TITLES.get(page, '')}"
+        await event.edit(title, buttons=await create_keyboard_buttons_admin_buttons(page=page))
+        await set_data(event.sender_id, "edit_keyboard_msg_id", str(event.original_update.msg_id))
+        return
 
     if data.startswith("edit_keyboard:"):
         parts = data.split(":")
