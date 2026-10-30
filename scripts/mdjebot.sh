@@ -8,7 +8,9 @@
 set -euo pipefail
 
 # ── Paths & constants ──────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="1.4.0"
+# The manager script ships with the release: keep this equal to the version in pyproject.toml
+# (tests/unit/test_script_version.py fails otherwise).
+readonly SCRIPT_VERSION="3.4.2"
 readonly CONFIG_DIR="/opt/mdjebot"
 readonly COMPOSE_FILE="${CONFIG_DIR}/docker-compose.yml"
 readonly ENV_FILE="${CONFIG_DIR}/.env"
