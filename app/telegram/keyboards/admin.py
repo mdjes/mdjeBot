@@ -8,7 +8,7 @@ from config import WEBAPP_URL
 
 from .common import create_button, glass_inline_button, glass_text_button, styled_simple_webview_button
 
-DOCS_URL = "https://mdjes.github.io/MdjeBot/"
+DOCS_URL = "https://mdjes.github.io/mdjeBot/"
 WEB_PANEL_URL = f"{WEBAPP_URL.rstrip('/')}?panel=1" if WEBAPP_URL.startswith("https://") else ""
 
 Lock_Channels_Menu_Buttons = [

@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://mdjes.github.io/MdjeBot/
+    url: https://mdjes.github.io/mdjeBot/
     about: Persian docs for install, user, and admin guides.
   - name: Telegram channel
     url: https://t.me/Mdje

@@ -2,7 +2,7 @@ import { createMDX } from 'fumadocs-mdx/next';
 
 const withMDX = createMDX();
 
-const repo = 'MdjeBot';
+const repo = 'mdjeBot';
 const isGithubPages = process.env.GITHUB_PAGES === 'true';
 const basePath = isGithubPages ? `/${repo}` : '';
 

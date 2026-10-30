@@ -9,7 +9,7 @@ const vazirmatn = Vazirmatn({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://mdjes.github.io/MdjeBot'),
+  metadataBase: new URL('https://mdjes.github.io/mdjeBot'),
   title: {
     default: 'MdjeBot',
     template: '%s | MdjeBot',

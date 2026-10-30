@@ -3,11 +3,11 @@
 [![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0%20%2B%20Commons%20Clause-orange)](LICENSE)
 [![Telethon](https://img.shields.io/badge/Telethon-1.44+-0088cc?logo=telegram)](https://github.com/LonamiWebs/Telethon)
-[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue?logo=github)](https://mdjes.github.io/MdjeBot/)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue?logo=github)](https://mdjes.github.io/mdjeBot/)
 
 ربات فروش وی‌پی‌ان مبتنی بر پنل [پاسارگارد پنل](https://github.com/PasarGuard/panel)، توسعه و نگهداری توسط **Mdje**.
 
-**[مستندات کامل (فارسی)](https://mdjes.github.io/MdjeBot/)**
+**[مستندات کامل (فارسی)](https://mdjes.github.io/mdjeBot/)**
 
 > [!IMPORTANT]
 > **این ربات کاملا رایگان است.** اگر کسی آن را به شما فروخته، کلاهبرداری شده‌اید.
@@ -25,7 +25,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/mdjes/MdjeBot/main/scripts/m
 
 یک ربات تلگرامی جدا که کاربران با **توکن ربات** و **آیدی عددی ادمین**، ربات فروش اختصاصی خودشان را می‌سازند. هر ربات در کانتینر Docker مستقل (با دیتابیس و Redis جدا) اجرا می‌شود و ربات‌ساز پنل ادمین کامل، اشتراک ماهانه، کیف پول، کارت‌به‌کارت، کد تخفیف و تست رایگان دارد.
 
-از همان اسکریپت نصب فعال می‌شود: `mdjebot` ← گزینهٔ **13) Bot Builder**. راهنمای کامل: [مستندات ربات‌ساز](https://mdjes.github.io/MdjeBot/docs/builder) و کد در [`builder/`](builder/).
+از همان اسکریپت نصب فعال می‌شود: `mdjebot` ← گزینهٔ **13) Bot Builder**. راهنمای کامل: [مستندات ربات‌ساز](https://mdjes.github.io/mdjeBot/docs/builder) و کد در [`builder/`](builder/).
 
 ## وب‌اپ (Telegram Mini App)
 

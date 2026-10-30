@@ -5,11 +5,11 @@
 [![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0%20%2B%20Commons%20Clause-orange)](LICENSE)
 [![Telethon](https://img.shields.io/badge/Telethon-1.44+-0088cc?logo=telegram)](https://github.com/LonamiWebs/Telethon)
-[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue?logo=github)](https://mdjes.github.io/MdjeBot/)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue?logo=github)](https://mdjes.github.io/mdjeBot/)
 
 Bot de venta de VPN basado en el panel [Pasargard Panel](https://github.com/PasarGuard/panel), desarrollado y mantenido por **Mdje**.
 
-**[Documentación completa (Persa)](https://mdjes.github.io/MdjeBot/)**
+**[Documentación completa (Persa)](https://mdjes.github.io/mdjeBot/)**
 
 > [!IMPORTANT]
 > **Este bot es completamente gratuito.** Si alguien te lo vendió, fuiste estafado.
