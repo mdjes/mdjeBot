@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.logger import LogTag, get_logger
+from app.telegram.keyboards.admin_menu import install_inline_glass
 from app.telegram.middlewares.admin import AdminContextMiddleware
 from app.telegram.middlewares.antiflood import AntifloodMiddleware
 from app.telegram.middlewares.ban import BanCheckMiddleware
@@ -36,6 +37,7 @@ def register_global_middlewares() -> None:
     Build default global pipelines (order = priority, low first).
     Importing this module registers Telethon bridge handlers.
     """
+    install_inline_glass()
     newmessage_chain = [
         ErrorBoundaryMiddleware(),
         LoggingMiddleware(),

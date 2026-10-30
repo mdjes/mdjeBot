@@ -9,6 +9,7 @@ export const INVALIDATE = [KEYBOARD_QUERY_KEY];
 
 export const sectionLabels = (t: TFunction): Record<string, string> => ({
   main_menu: t("panel.keyboard.mainMenu"),
+  admin_menu: t("panel.keyboard.adminMenu"),
   my_services: t("panel.keyboard.myServices"),
   balance: t("panel.common.addBalance"),
   buy: t("panel.keyboard.buyService"),

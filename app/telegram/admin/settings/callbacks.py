@@ -176,7 +176,8 @@ async def callback_settings_admin(event: events.CallbackQuery.Event):
         pretty = KEYBOARD_BUTTON_TITLES.get(button_key, button_key)
         preview = (
             f"📝 متن فعلی دکمه «{pretty}»:\n<blockquote expandable>{current_text or 'ثبت نشده'}</blockquote>\n\n"
-            "لطفاً متن جدید را ارسال کنید:"
+            "لطفاً متن جدید را ارسال کنید:\n"
+            "💡 اگر همراه نام، یک ایموجی متحرک (پریمیوم) بفرستید، همان به‌عنوان آیکون دکمه ثبت می‌شود."
         )
         await set_step(event.sender_id, f"edit_keyboard:{button_key}:{page}")
         await set_data(event.sender_id, "edit_keyboard_msg_id", str(event.original_update.msg_id))
@@ -249,13 +250,8 @@ async def callback_settings_admin(event: events.CallbackQuery.Event):
         try:
             page = int(data.split(":")[1])
 
-            page_titles = {
-                1: "📄 **صفحه 1 از 4:** دکمه‌های منوی اصلی",
-                2: "📄 **صفحه 2 از 4:** دکمه‌های بخش سرویس‌های من",
-                3: "📄 **صفحه 3 از 4:** دکمه‌های افزایش موجودی",
-                4: "📄 **صفحه 4 از 4:** دکمه‌های خرید سرویس",
-            }
-            message_text = f"⌨️ یکی از دکمه‌های کیبورد را برای ویرایش انتخاب کنید:\n\n{page_titles.get(page, '')}"
+            page_title = texts.KEYBOARD_PAGE_TITLES.get(page, "")
+            message_text = f"⌨️ یکی از دکمه‌های کیبورد را برای ویرایش انتخاب کنید:\n\n{page_title}"
 
             await event.edit(
                 message_text,

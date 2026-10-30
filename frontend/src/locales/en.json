@@ -973,6 +973,7 @@
       "blockedResellerOff": "Reseller sales are off, or no panel is enabled for them",
       "other": "Other",
       "mainMenu": "Main menu",
+      "adminMenu": "Admin menu",
       "showToUser": "Show to users",
       "notShown": "Not shown",
       "noIconYet": "No icon set yet",

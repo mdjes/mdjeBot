@@ -10,7 +10,7 @@ from app.db.crud.settings import SettingsManager
 from app.logger import get_logger
 from app.services.telegram.rich_message import send_native_rich_message
 from app.telegram.admin.settings import states, texts
-from app.telegram.keyboards.common import extract_custom_emoji_document_id
+from app.telegram.keyboards.common import extract_custom_emoji_document_id, split_button_label
 from app.telegram.keyboards.customization import (
     create_keyboard_button_config_view,
     create_keyboard_buttons_admin_buttons,
@@ -20,6 +20,7 @@ from app.telegram.keyboards.settings import create_buttons_settings, get_setting
 from app.telegram.keyboards.texts import TEXT_KEYS_CONFIG, create_text_sections_buttons, render_stored_text_html
 from app.telegram.state import delete_data, get_data, get_step, set_data, set_step
 from app.utils.text.default_texts import default_bot_text
+from app.utils.text.glass import GLASS_STYLE, glass_text, unglass_text
 from config import ADMIN_ID
 
 logger = get_logger(__name__)
@@ -81,15 +82,24 @@ async def message_handler_settings_admin(event: Message):
         button_key = parts[1] if len(parts) >= 2 else None
         page = int(parts[2]) if len(parts) >= 3 else 1
 
+        label, icon_id = split_button_label(event.message)
         if not button_key:
             await event.respond("❌ کلید دکمه نامعتبر است.")
+        elif not label:
+            await event.respond("❌ علاوه بر ایموجی، یک نام متنی هم برای دکمه بفرستید.")
         else:
             keyboard_crud = KeyboardButtonCRUD()
-            saved = await keyboard_crud.set_button_text(button_key=button_key, button_text=msg)
+            current = await keyboard_crud.get_button(button_key)
+            if current is not None and current.button_style == GLASS_STYLE:
+                # Renaming keeps the glass look the button was saved with.
+                label = glass_text(unglass_text(label))
+            saved = await keyboard_crud.set_button(button_key, button_text=label, button_icon=icon_id)
             prev_msg_id = await get_data(event.sender_id, "edit_keyboard_msg_id")
 
             if saved:
                 success_message = "✅ متن دکمه با موفقیت ذخیره شد."
+                if icon_id is not None:
+                    success_message += "\n🖼 ایموجی متحرک هم به‌عنوان آیکون دکمه ثبت شد."
                 pretty = KEYBOARD_BUTTON_TITLES.get(button_key, button_key)
                 _, config_buttons = await create_keyboard_button_config_view(button_key, page, keyboard_crud)
 

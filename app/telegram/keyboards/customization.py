@@ -4,6 +4,7 @@ from telethon import Button
 
 from app.db.crud.keyboards import KeyboardButtonCRUD
 from app.services.payments.ir_gateways.providers import GATEWAYS
+from app.utils.admin_buttons import manager_groups
 
 from .common import _get_keyboard_button_config, styled_callback_button
 from .registry import (
@@ -68,7 +69,7 @@ async def create_keyboard_buttons_admin_buttons(page: int = 1):
     Create text management buttons keyboard buttons with professional layout
 
     Args:
-        page: page number (1: home, 2: my-services, 3: balance, 4: buy, 5: inline)
+        page: page number (1: home, 2: my-services, 3: balance, 4: buy, 5: reseller, 6: admin menu)
 
     Returns:
     List of paginated buttons
@@ -170,6 +171,7 @@ async def create_keyboard_buttons_admin_buttons(page: int = 1):
                     await _keyboard_admin_button(keyboard_crud, "in.balance.manual", 3),
                 ],
                 [await _keyboard_admin_button(keyboard_crud, "in.balance.referral", 3)],
+                [await _keyboard_admin_button(keyboard_crud, "in.balance.gift", 3)],
                 [await _keyboard_admin_button(keyboard_crud, "in.balance.back_home", 3)],
                 [await _keyboard_admin_button(keyboard_crud, "in.balance.disabled", 3)],
                 [Button.inline("📋 ━━━━ درگاه‌های آنلاین ━━━━", data="no_action")],
@@ -275,8 +277,16 @@ async def create_keyboard_buttons_admin_buttons(page: int = 1):
 
         navigation = []
         navigation.append(Button.inline("⬅️ صفحه قبلی", data="keyboard_page:4"))
+        navigation.append(Button.inline("➡️ صفحه بعدی", data="keyboard_page:6"))
         if navigation:
             buttons.append(navigation)
+
+    elif page == 6:
+        for heading, rows in manager_groups():
+            buttons.append([Button.inline(f"📋 ━━━━ {heading} ━━━━", data="no_action")])
+            for keys in rows:
+                buttons.append([await _keyboard_admin_button(keyboard_crud, key, 6) for key in keys])
+        buttons.append([Button.inline("⬅️ صفحه قبلی", data="keyboard_page:5")])
 
     buttons.append([Button.inline("🔙 بازگشت به پنل", data="back_to_admin_panel")])
 

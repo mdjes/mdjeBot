@@ -2,6 +2,7 @@
 
 from app.i18n import DEFAULT_LANGUAGE, namespace, t
 from app.services.payments.ir_gateways.providers import GATEWAYS
+from app.utils.admin_buttons import ADMIN_ITEMS
 
 KEYBOARD_BUTTON_TITLES = {
     "bt.menu_my_services": "سرویس های من",
@@ -45,6 +46,7 @@ KEYBOARD_BUTTON_TITLES = {
     "in.balance.manual": "کارت به کارت (دستی)",
     "in.balance.disabled": "شارژ غیرفعال",
     "in.balance.referral": "دعوت دوستان",
+    "in.balance.gift": "کد هدیه",
     "in.balance.trx": "پرداخت TRX",
     "in.balance.usdt": "پرداخت USDT",
     "in.balance.usdt_ton": "پرداخت USDT-TON",
@@ -92,6 +94,11 @@ for _provider in GATEWAYS.values():
     KEYBOARD_BUTTON_DEFAULTS[f"in.balance.{_provider.key}"] = t(
         "button_templates.gateway_payment", DEFAULT_LANGUAGE, emoji=_provider.emoji, title=_provider.title
     )
+
+# The admin menus are renamable like any other button (stored glass, like the home menu).
+for _item in ADMIN_ITEMS.values():
+    KEYBOARD_BUTTON_TITLES[_item.key] = _item.title
+    KEYBOARD_BUTTON_DEFAULTS[_item.key] = _item.label
 
 
 KEYBOARD_BUTTON_DEFAULT_STYLES = {

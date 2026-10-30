@@ -7,16 +7,24 @@ from sqlalchemy.future import select
 
 from app.db.base import AsyncSessionLocal as Session
 from app.db.models.keyboards import KeyboardButton
+from app.utils.admin_buttons import ADMIN_ITEMS
 from app.utils.text.glass import GLASS_STYLE, glass_text
 
 # Rarely-changing config table — load once into process memory.
 _buttons_by_key: dict[str, KeyboardButton] | None = None
 _buttons_lock = asyncio.Lock()
+# Bumped on every invalidation, so a keyboard built once (the admin menus) can tell when it has gone stale.
+_cache_version = 0
 
 
 def invalidate_keyboard_button_cache() -> None:
-    global _buttons_by_key
+    global _buttons_by_key, _cache_version
     _buttons_by_key = None
+    _cache_version += 1
+
+
+def keyboard_cache_version() -> int:
+    return _cache_version
 
 
 async def _ensure_keyboard_button_cache() -> dict[str, KeyboardButton]:
@@ -254,6 +262,7 @@ class KeyboardButtonCRUD:
             ("in.balance.auto", "💷 کارت به کارت خودکار", "دکمه کارت به کارت خودکار"),
             ("in.balance.disabled", "❌ شارژ حساب غیرفعال می‌باشد", "دکمه زمانی که هیچ روش پرداختی فعال نیست"),
             ("in.balance.referral", "🎁 دعوت دوستان", "دکمه دعوت دوستان در منوی شارژ"),
+            ("in.balance.gift", "🎁 کد هدیه", "دکمه ثبت کد هدیه در منوی شارژ"),
             ("in.balance.trx", "💵 پرداخت با TRX (ترون)", "دکمه پرداخت TRX"),
             ("in.balance.usdt", "💵 پرداخت با USDT (تتر)", "دکمه پرداخت USDT"),
             ("in.balance.ton", "💎 پرداخت با TON (تون)", "دکمه پرداخت TON"),
@@ -286,6 +295,7 @@ class KeyboardButtonCRUD:
                 "دکمه خرید حجم و زمان دلخواه در فلو خرید سرویس",
             ),
             ("in.buy.empty_list", "🚀 خرید اکانت ویتوری", "دکمه خرید وقتی کاربر سرویسی ندارد"),
+            *((item.key, item.label, item.title) for item in ADMIN_ITEMS.values()),
         ]
 
         try:

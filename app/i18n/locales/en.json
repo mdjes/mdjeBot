@@ -138,9 +138,24 @@
     "in.rs.delete": "🗑 Delete reseller panel",
     "in.rs.buy_random_username": "🎲 Random name",
     "in.rs.delete_confirm": "✅ Yes, delete it completely",
-    "in.rs.chpwd_confirm": "✅ Yes, change the password"
+    "in.rs.chpwd_confirm": "✅ Yes, change the password",
+    "in.balance.gift": "🎁 Gift code"
   },
   "button_templates": {
     "gateway_payment": "{emoji} Pay online ({title})"
+  },
+  "gifts": {
+    "prompt": "**🎁 Gift code**\n━━━━━━━━━━━━━━━\nSend your gift code and its amount will be added to your wallet.\n\n💡 Each person can use a code only once.",
+    "ok": "**🎉 Gift code redeemed**\n━━━━━━━━━━━━━━━\n💰 `{amount}` Toman was added to your wallet.\n👛 New balance: `{balance}` Toman",
+    "not_found": "❌ That gift code was not found. Check it and send it again.",
+    "expired": "⌛️ This gift code has expired.",
+    "exhausted": "😕 This gift code has no uses left.",
+    "inactive": "🚫 This gift code is not active.",
+    "already": "ℹ️ You have already used this gift code.",
+    "no_user": "⚠️ Start the bot with /start first.",
+    "disabled": "🚫 Gift codes are turned off for now.",
+    "too_many": "⛔️ Too many wrong codes. Try again later.",
+    "btn_cancel": "❌ Cancel",
+    "cancelled": "Cancelled."
   }
 }

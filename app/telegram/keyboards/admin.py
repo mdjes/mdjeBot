@@ -4,12 +4,10 @@ from telethon import Button
 
 from app.db.crud.user import UserCRUD
 from app.services.reseller.plan_rules import USAGE, is_renewable, rule_for
-from config import WEBAPP_URL
+from app.utils.admin_buttons import DOCS_URL as DOCS_URL
 
-from .common import create_button, glass_inline_button, glass_text_button, styled_simple_webview_button
-
-DOCS_URL = "https://mdjes.github.io/mdjeBot/"
-WEB_PANEL_URL = f"{WEBAPP_URL.rstrip('/')}?panel=1" if WEBAPP_URL.startswith("https://") else ""
+from .admin_menu import MENUS
+from .common import glass_inline_button, glass_text_button
 
 Lock_Channels_Menu_Buttons = [
     [glass_text_button("افزودن کانال"), glass_text_button("حذف کانال")],
@@ -129,41 +127,10 @@ def build_admin_reseller_chpwd_confirm_buttons(user_id: int, account_code: int) 
     ]
 
 
-Panel_Admin_Buttons = [
-    [create_button("💳 تنظیمات درگاه"), create_button("👥 آمار گیری")],
-    [create_button("📚 منوی پنل ها"), create_button("⚙️ تنظیمات ربات")],
-    [create_button("🎟 کدتخفیف"), create_button("🗞 ساخت پلن")],
-    [create_button("🏢 پلن نمایندگی")],
-    [create_button("👤 مدیریت کاربر"), create_button("📮 ارسال همگانی")],
-    [create_button("📥 فوروارد همگانی")],
-    [create_button("➖ کسر موجودی"), create_button("➕ افزودن موجودی")],
-    [create_button("💰 شارژ گروهی"), create_button("🔄 ریست دریافت تست")],
-    [create_button("📈 افزایش حجم و زمان همگانی"), create_button("🔐 قفل چنل ها")],
-    [create_button("📝 مدیریت لاگ‌ها"), create_button("📦 بکاپ ربات")],
-    [create_button("🧬 مایگریشن از ربات دیگر")],
-    [create_button("📝 متن‌های ربات"), create_button("⌨️ مدیریت دکمه‌های کیبورد")],
-    [create_button("🎁 سیستم دعوت دوستان"), create_button("🔗 لینک های آماده")],
-    [
-        styled_simple_webview_button("📚 مستندات ربات", DOCS_URL),
-        # Plain, not a web-view button: a web app opened from the reply keyboard
-        # gets no Telegram sign-in, so the panel would ask the admin to log in by
-        # phone. Pressing it brings an inline web-view button instead.
-        *([create_button("🖥 پنل تحت وب")] if WEB_PANEL_URL else []),
-    ],
-    [create_button("🏠")],
-]
-
-BT_takhfifList = [
-    [create_button("🎛 لیست کدتخفیف"), create_button("🪄 ساخت کدتخفیف")],
-    [create_button("🔙 بازگشت به پنل")],
-]
-
-panel_xui_buttons = [
-    [create_button("📉 وضعیت پنل ها"), create_button("▫️ افزودن پنل جدید")],
-    [create_button("🔙 بازگشت به پنل")],
-]
-
-
-panel_back = [[create_button("🔙 بازگشت به پنل")]]
-
-Home_Back = [[create_button("🏠")]]
+# The reply menus below are rebuilt in place from the stored buttons (see ``admin_menu``), so importing
+# them by name keeps working after an admin renames a button.
+Panel_Admin_Buttons = MENUS["main"]
+BT_takhfifList = MENUS["discounts"]
+panel_xui_buttons = MENUS["panels"]
+panel_back = MENUS["back"]
+Home_Back = MENUS["home"]

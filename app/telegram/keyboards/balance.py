@@ -2,6 +2,7 @@
 
 from app.db.crud.keyboards import KeyboardButtonCRUD
 from app.db.crud.referral import ReferralManager
+from app.services.gifts import settings as gift_settings
 from app.services.payments.ir_gateways import config as ir_gateway_config
 from app.services.payments.tonpays_config import is_ready as tonpays_ready
 from app.telegram.admin.settings_payment.texts import is_manual_card_visible
@@ -116,6 +117,11 @@ async def create_inline_cartbcard(settings, user=None) -> list:
         )
         buttons.append([styled_callback_button(disabled_text, b"no_action", disabled_style)])
 
+    if await gift_settings.get_bool(gift_settings.GIFTS_ENABLED):
+        gift_text, gift_style = await _get_keyboard_button_config(
+            keyboard_crud, "in.balance.gift", KEYBOARD_BUTTON_DEFAULTS["in.balance.gift"]
+        )
+        buttons.append([styled_callback_button(gift_text, b"gift.open", gift_style)])
     if await ReferralManager().is_referral_enabled():
         referral_text, referral_style = await _get_keyboard_button_config(
             keyboard_crud,

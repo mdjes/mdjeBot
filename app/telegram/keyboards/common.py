@@ -93,6 +93,29 @@ def extract_custom_emoji_document_id(message) -> int | None:
     return None
 
 
+def split_button_label(message) -> tuple[str, int | None]:
+    """A typed button name and the first animated (custom) emoji in it.
+
+    A button label cannot carry a custom emoji, but a button can show one as its icon, so a name sent with
+    an animated emoji becomes the name without it plus that emoji as the icon.
+    """
+    text = getattr(message, "message", None) or ""
+    emojis = sorted(
+        (e for e in (getattr(message, "entities", None) or []) if isinstance(e, MessageEntityCustomEmoji)),
+        key=lambda e: e.offset,
+    )
+    if not emojis:
+        return text.strip(), None
+    # Entity offsets count UTF-16 code units.
+    units = text.encode("utf-16-le")
+    kept, position = bytearray(), 0
+    for entity in emojis:
+        kept += units[position : entity.offset * 2]
+        position = (entity.offset + entity.length) * 2
+    kept += units[position:]
+    return " ".join(kept.decode("utf-16-le").split()), int(emojis[0].document_id)
+
+
 def build_telegram_button_style(style: str | None, icon: int | None):
     if style and style not in ("primary", "danger", "success"):
         return None

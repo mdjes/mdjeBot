@@ -25,7 +25,7 @@ from app.telegram.admin.manage_user.states import (
     RESELLER_TOOL_USER_KEY,
     STEP_ADMIN_RESELLER_TOOL,
 )
-from app.telegram.keyboards.admin import build_admin_reseller_account_buttons, create_inline_manageuser
+from app.telegram.keyboards.admin import build_admin_reseller_account_buttons, create_inline_manageuser, panel_back
 from app.telegram.shared.reseller_plan_guides import parse_number
 from app.telegram.shared.utils.username import is_valid_username
 from app.telegram.state import delete_data, get_data, get_step, set_data, set_step
@@ -93,9 +93,7 @@ async def msg_manage_user_admin(event: Message):
     msg = event.message.text
 
     if await get_step(event.sender_id) == "panel" and msg == "👤 مدیریت کاربر":
-        await event.respond(
-            "〰️ لطفا آیدی عددی کاربر را ارسال کنید:", buttons=[Button.text("🔙 بازگشت به پنل", resize=True)]
-        )
+        await event.respond("〰️ لطفا آیدی عددی کاربر را ارسال کنید:", buttons=panel_back)
         await set_step(event.sender_id, "MToUser")
 
     elif await get_step(event.sender_id) == STEP_ADMIN_RESELLER_TOOL and msg and msg.strip():
