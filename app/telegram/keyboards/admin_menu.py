@@ -24,7 +24,7 @@ from telethon import Button
 from app.db.crud.keyboards import KeyboardButtonCRUD, keyboard_cache_version
 from app.db.crud.settings import SettingsManager
 from app.utils.admin_buttons import ADMIN_ITEMS, MENU_LAYOUTS, AdminItem
-from app.utils.text.glass import glass_text, unglass_text
+from app.utils.text.glass import GLASS_STYLE, glass_text, unglass_text
 from config import WEBAPP_URL
 
 from .common import build_telegram_button_style, styled_callback_button, styled_url_button, styled_webview_button
@@ -84,10 +84,10 @@ def _from_row(item: AdminItem, row) -> tuple[str, str | None, int | None]:
     """(text, telegram style, icon) for one button and the global glass setting."""
     text = ((row.button_text if row else "") or "").strip() or item.label
     stored_style = row.button_style if row else None
-    if _admin_glass_enabled:
-        text = glass_text(unglass_text(text))
-    else:
+    if not _admin_glass_enabled:
         text = unglass_text(text)
+    elif stored_style is None or stored_style == GLASS_STYLE:
+        text = glass_text(unglass_text(text))
     return text, stored_style, (row.button_icon if row else None)
 
 
