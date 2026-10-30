@@ -296,5 +296,5 @@ async def top_customers_rich_blocks(view: str = "today") -> list:
     blocks.append(types.PageBlockDivider())
     blocks.extend(top_view_button_rows(view))
     blocks.append(types.PageBlockDivider())
-    blocks.append(types.PageBlockFooter(_rt("Maintained By @Mdje")))
+    blocks.append(types.PageBlockFooter(_rt("Maintained By @Sutaw")))
     return blocks

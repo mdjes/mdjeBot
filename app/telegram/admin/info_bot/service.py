@@ -146,7 +146,7 @@ def _fmt_updated(updated_at: datetime) -> str:
 
 
 # Credit line shared by every rich-message footer across the stats panel.
-CREDIT_LINE = "Maintained By @Mdje"
+CREDIT_LINE = "Maintained By @Sutaw"
 
 
 def _updated_footer(updated_at: datetime) -> types.PageBlockFooter:
@@ -394,7 +394,7 @@ def main_text(payload: dict) -> str:
     lines.extend(
         [
             f"🕒 {bold('آخرین بروزرسانی:')} {code(_fmt_updated(updated_at))}",
-            quote("Maintained By @Mdje"),
+            quote("Maintained By @Sutaw"),
         ]
     )
     return "\n".join(lines)

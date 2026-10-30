@@ -8,8 +8,8 @@ export const gitConfig = {
   branch: 'main',
 };
 
-/** Channel for project updates: https://t.me/Mdje */
-export const telegramChannelUrl = 'https://t.me/Mdje';
+/** Channel for project updates: https://t.me/sutaw */
+export const telegramChannelUrl = 'https://t.me/sutaw';
 
-/** Community group: https://t.me/Mdje */
-export const telegramGroupUrl = 'https://t.me/Mdje';
+/** Community group: https://t.me/sutaw */
+export const telegramGroupUrl = 'https://t.me/sutaw';

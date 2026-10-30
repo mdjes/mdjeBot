@@ -46,7 +46,7 @@ _SETUP_WARNING = (
     "از بخش **📝 مدیریت لاگ‌ها**، مقصد ارسال لاگ‌ها را مشخص کنید."
 )
 
-_OFFICIAL_CHANNEL_URL = "https://t.me/Mdje"
+_OFFICIAL_CHANNEL_URL = "https://t.me/sutaw"
 
 _POWERED_BY_NOTICE = f"🤖 این ربات با ربات‌ساز **MdjeBot** ساخته شده است.\n📢 {_OFFICIAL_CHANNEL_URL}"
 
