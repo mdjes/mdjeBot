@@ -17,7 +17,6 @@ icon: Download
 | دسترسی | `root` یا کاربری با `sudo` (اسکریپت خودش با sudo دوباره اجرا می‌شود) |
 | منابع | هر ربات مشتری حدود ۳۸۴ مگابایت رم می‌گیرد؛ دیسک خالی حداقل **۲ گیگابایت** |
 | پورت‌های آزاد | `6161` تا `6163` برای سرویس‌ها و بازهٔ `7000`–`7999` برای ربات‌های مشتری — جزئیات در [پورت‌ها](/docs/getting-started/ports) |
-| API_ID و API_HASH | اپ شخصی خودتان از [my.telegram.org/apps](https://my.telegram.org/apps) (همهٔ ربات‌های مشتری از همین استفاده می‌کنند) |
 | توکن ربات‌ساز | یک ربات **جدید** از [@BotFather](https://t.me/BotFather) برای خود ربات‌ساز |
 | آیدی عددی ادمین | آیدی عددی اکانت تلگرام خودتان (مثلاً از @userinfobot) |
 
@@ -107,20 +106,16 @@ mdjebot
 ### وارد کردن اطلاعات
 
 <CliPanel title="Credentials">
-{`[*] Telegram API credentials — create your own app at https://my.telegram.org/apps
-  API_ID:
-  API_HASH:
-
-[*] Bot Builder — the bot your customers use to create their own bots.
+{`[*] Bot Builder — the bot your customers use to create their own bots.
   Builder BOT_TOKEN:
   Your numeric Telegram ID(s), comma separated (see @userinfobot):`}
 </CliPanel>
 
-<CliPrompt
-  label="API_ID / API_HASH:"
-  required
-  hint="از my.telegram.org/apps. همهٔ ربات‌های مشتری از همین دو مقدار استفاده می‌کنند، پس اپ شخصی خودتان را بسازید."
-/>
+فقط همین دو مورد پرسیده می‌شود.
+
+<Callout type="info" title="API_ID و API_HASH پرسیده نمی‌شود">
+نصب با مقادیر عمومی تلگرام کار می‌کند. اگر خواستید اپ شخصی خودتان را از [my.telegram.org/apps](https://my.telegram.org/apps) بسازید و جایگزین کنید (پیشنهاد می‌شود وقتی تعداد ربات‌ها زیاد شد، چون همهٔ ربات‌های مشتری از همین دو مقدار استفاده می‌کنند)، از منو بزنید: `mdjebot` ← `12` ← `5) Change API_ID / API_HASH`.
+</Callout>
 
 <CliPrompt
   label="Builder BOT_TOKEN:"

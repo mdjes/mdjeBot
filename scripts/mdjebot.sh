@@ -33,6 +33,9 @@ readonly REPO_GIT_URL="https://github.com/mdjes/MdjeBot.git"
 readonly PHPMYADMIN_ARCHIVE_URL="https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.tar.gz"
 readonly BOT_IMAGE="ghcr.io/mdjes/mdjebot"
 readonly FASTAPI_PORT_DEFAULT=6160
+# Telegram's public API credentials (Telegram Desktop). Used unless you set your own in .env.
+readonly DEFAULT_API_ID="2040"
+readonly DEFAULT_API_HASH="b18441a1ff607e10a989891a5462e627"
 readonly REDIS_PORT=6161
 readonly MARIADB_PORT=6162
 readonly PHPMYADMIN_PORT=6163
@@ -1194,12 +1197,10 @@ generate_env_file() {
         die "Downloaded .env.example is empty or invalid."
     fi
 
-    echo
-    info "Telegram API credentials — create your own app at https://my.telegram.org/apps"
-    info "(every customer bot shares them, so do not reuse someone else's)."
-    api_id="$(prompt_required "API_ID" "  API_ID")"
-    api_hash="$(prompt_required "API_HASH" "  API_HASH")"
-    [[ "$api_id" =~ ^[0-9]+$ ]] || die "API_ID must be a number."
+    # Not asked: Telegram's public API credentials are used. Change them any time with
+    # `mdjebot` -> 12 -> "Change API_ID / API_HASH" (e.g. your own app from my.telegram.org/apps).
+    api_id="$DEFAULT_API_ID"
+    api_hash="$DEFAULT_API_HASH"
 
     echo
     info "Bot Builder — the bot your customers use to create their own bots."
@@ -3044,6 +3045,22 @@ builder_configure() {
     ok "Builder settings saved to ${ENV_FILE}"
 }
 
+builder_set_api_credentials() {
+    local api_id api_hash
+    info "Create your own app at https://my.telegram.org/apps (all customer bots share these values)."
+    info "Current API_ID: $(get_env_value API_ID)"
+    api_id="$(prompt_required "API_ID" "  New API_ID")"
+    api_hash="$(prompt_required "API_HASH" "  New API_HASH")"
+    [[ "$api_id" =~ ^[0-9]+$ ]] || die "API_ID must be a number."
+    [[ "$api_hash" =~ ^[0-9a-fA-F]{32}$ ]] || die "API_HASH must be 32 hex characters."
+    set_env_var "$ENV_FILE" "API_ID" "$api_id"
+    set_env_var "$ENV_FILE" "API_HASH" "$api_hash"
+    chmod 600 "$ENV_FILE"
+    docker_compose up -d --force-recreate builder
+    ok "Builder restarted. Customer bots keep their old values until they are redeployed"
+    ok "(builder bot -> /admin -> Server -> Update all bots)."
+}
+
 action_builder() {
     local choice
     draw_banner
@@ -3057,6 +3074,7 @@ action_builder() {
     echo "  2) View builder logs"
     echo "  3) Change builder token / admin IDs"
     echo "  4) List customer bot containers"
+    echo "  5) Change API_ID / API_HASH (default: Telegram's public ones)"
     echo "  0) Back"
     echo
     read -r -p "Choice: " choice || true
@@ -3076,6 +3094,9 @@ action_builder() {
         4)
             docker ps -a --filter "label=mdjebot.managed=true" \
                 --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
+            ;;
+        5)
+            builder_set_api_credentials
             ;;
         *) return 0 ;;
     esac

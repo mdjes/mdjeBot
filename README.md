@@ -17,7 +17,7 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/mdjes/MdjeBot/main/scripts/mdjebot.sh)
 ```
 
-اسکریپت `API_ID` و `API_HASH`، **توکن ربات‌ساز** (یک ربات جدید از @BotFather) و **آیدی عددی ادمین** را می‌پرسد و بقیه را خودکار انجام می‌دهد. بعد از نصب: `mdjebot`
+اسکریپت فقط **توکن ربات‌ساز** (یک ربات جدید از @BotFather) و **آیدی عددی ادمین** را می‌پرسد و بقیه را خودکار انجام می‌دهد. بعد از نصب: `mdjebot`
 
 ## ربات‌ساز چه می‌کند؟
 
