@@ -148,7 +148,7 @@ async def callback_settings_admin(event: events.CallbackQuery.Event):
     if data.startswith("admin_menu_glass_toggle:"):
         try:
             page = max(1, min(int(data.split(":", 1)[1]), 6))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             await event.answer("❌ درخواست نامعتبر است.", alert=True)
             return
         settings = await SettingsManager().get_settings()
