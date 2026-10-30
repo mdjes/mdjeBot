@@ -87,7 +87,7 @@ class AdminFlows:
 
     # ── plans ─────────────────────────────────────────────────────────────────
     @route("a:plans")
-    async def plans(self, ctx) -> None:
+    async def admin_plans(self, ctx) -> None:
         self.clear_state(ctx.user_id)
         async with self.db.session() as s:
             plans = await billing.list_plans(s, active_only=False)
