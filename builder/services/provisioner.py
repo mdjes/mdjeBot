@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import re
 import shutil
@@ -46,15 +47,20 @@ class CmdResult:
 Runner = Callable[..., Awaitable[CmdResult]]
 
 
-async def run_command(*args: str, timeout: float = 180.0) -> CmdResult:  # noqa: ASYNC109
+async def run_command(*args: str, timeout: float = 180.0, stdin: str | None = None) -> CmdResult:  # noqa: ASYNC109
     try:
         proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *args,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError:
         return CmdResult(127, "", f"{args[0]}: command not found")
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=stdin.encode() if stdin is not None else None), timeout=timeout
+        )
     except TimeoutError:
         proc.kill()
         await proc.communicate()
@@ -160,8 +166,10 @@ class Provisioner:
         with contextlib.suppress(OSError):
             os.chmod(env_path, 0o600)
 
-    async def _docker(self, *args: str, timeout: float = 180.0) -> CmdResult:  # noqa: ASYNC109
-        return await self._run(self.settings.docker_bin, *args, timeout=timeout)
+    async def _docker(self, *args: str, timeout: float = 180.0, stdin: str | None = None) -> CmdResult:  # noqa: ASYNC109
+        if stdin is None:
+            return await self._run(self.settings.docker_bin, *args, timeout=timeout)
+        return await self._run(self.settings.docker_bin, *args, timeout=timeout, stdin=stdin)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
     async def deploy(self, tenant: Tenant, *, token: str, db_password: str, memory: str, cpus: str) -> None:
@@ -253,6 +261,34 @@ class Provisioner:
     async def logs(self, tenant: Tenant, tail: int = 60) -> str:
         result = await self._docker("logs", "--tail", str(tail), tenant.container_name, timeout=30)
         return ((result.out or "") + (result.err or "")).strip()
+
+    async def exec_json(self, tenant: Tenant, module: str, payload: dict, *, timeout: float = 120.0) -> dict:  # noqa: ASYNC109
+        """Run ``python -m <module>`` inside the tenant's container with ``payload`` on stdin.
+
+        The module answers with a final ``RESULT {json}`` line (see ``app.cli.panel_link``). A throwaway
+        Telethon session path keeps the helper away from the running bot's session file.
+        """
+        result = await self._docker(
+            "exec",
+            "-i",
+            "-e",
+            "TELETHON_SESSION_PATH=/tmp/builder-cli-session",
+            tenant.container_name,
+            "uv",
+            "run",
+            "python",
+            "-m",
+            module,
+            timeout=timeout,
+            stdin=json.dumps(payload),
+        )
+        for line in reversed((result.out or "").splitlines()):
+            if line.startswith("RESULT "):
+                try:
+                    return json.loads(line[len("RESULT ") :])
+                except ValueError:
+                    break
+        raise ProvisionError(((result.err or result.out).strip() or "no answer from the bot container")[-400:])
 
     async def pull_image(self) -> CmdResult:
         return await self._docker("pull", self.settings.tenant_image, timeout=900)

@@ -67,3 +67,24 @@ def days_left(value: datetime | None, now: datetime) -> int | None:
     if value is None:
         return None
     return max(0, (value - now).days)
+
+
+def fmt_bytes(value: int) -> str:
+    """Human readable traffic size (binary units, shown as GB/MB like panels do)."""
+    value = int(value or 0)
+    if value >= 1024**4:
+        return f"{value / 1024**4:.2f} TB"
+    if value >= 1024**3:
+        return f"{value / 1024**3:.2f} GB"
+    if value >= 1024**2:
+        return f"{value / 1024**2:.0f} MB"
+    return f"{value / 1024:.0f} KB"
+
+
+def usage_bar(used: int, limit: int, width: int = 10) -> str:
+    """``███░░░░░░░ 30٪`` — a text progress bar for panel traffic."""
+    if limit <= 0:
+        return "∞"
+    ratio = max(0.0, min(1.0, used / limit))
+    filled = round(ratio * width)
+    return f"{'█' * filled}{'░' * (width - filled)} {int(ratio * 100)}٪"

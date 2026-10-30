@@ -1,4 +1,16 @@
 {
   "title": "مستندات",
-  "pages": ["index", "getting-started", "webapp", "user", "admin", "builder", "faq", "support"]
+  "pages": [
+    "index",
+    "getting-started",
+    "---ربات‌ساز (Builder)---",
+    "builder",
+    "---ربات فروش (Bot)---",
+    "webapp",
+    "user",
+    "admin",
+    "---",
+    "faq",
+    "support"
+  ]
 }

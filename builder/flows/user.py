@@ -58,6 +58,10 @@ class UserFlows:
         state = self.get_state(ctx.user_id)
         return state if state is not None and state.name in names else None
 
+    async def _has_panel_plans(self) -> bool:
+        async with self.db.session() as s:
+            return bool(await billing.list_panel_plans(s, kind="plan"))
+
     async def _expired_session(self, ctx) -> None:
         await ctx.answer("⌛️ این مرحله منقضی شده است. دوباره شروع کنید.", alert=True)
         await self.home(ctx)
@@ -81,6 +85,8 @@ class UserFlows:
             [Btn("🤖 ساخت ربات جدید", "u:new"), Btn("📂 ربات‌های من", "u:bots")],
             [Btn("💰 کیف پول", "u:wallet"), Btn("🏷 تعرفه‌ها", "u:plans")],
         ]
+        if cfg.bool("panel_sales_enabled") and await self._has_panel_plans():
+            rows.append([Btn("🧩 پنل‌ها (حجم برای ربات)", "u:panels")])
         if cfg.bool("trial_enabled") and not user.trial_used:
             rows.append([Btn(f"🎁 تست رایگان {cfg.int('trial_days')} روزه", "u:trial")])
         rows.append([Btn("📞 پشتیبانی", "u:support")])
@@ -704,6 +710,9 @@ class UserFlows:
             await self.notifier.send(
                 owner_id, f"💰 مبلغ {fmt_money(fulfillment.credited)} به کیف پول شما اضافه شد.", BACK_HOME
             )
+        if fulfillment.panel_action:
+            await self.apply_panel_fulfillment(fulfillment, owner_id)
+            return
         if fulfillment.tenant_id is None:
             return
         if fulfillment.awaiting_token:
@@ -728,6 +737,8 @@ class UserFlows:
                     [[Btn("🔁 تلاش مجدد", f"a:tdeploy:{tenant.id}")]],
                 )
             return
+        if result is not None and result.ok:
+            self.panels.link_tenant_panels(fulfillment.tenant_id)  # connect panels bought for this bot
         lines = [
             f"✅ ربات <b>{label}</b> آماده است.",
             f"اعتبار تا: {fmt_date(tenant.expires_at)}",

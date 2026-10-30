@@ -25,6 +25,9 @@ DEFAULTS: dict[str, str] = {
     "welcome_text": "👋 به ربات‌ساز خوش آمدید.\nاینجا می‌توانید ربات فروش وی‌پی‌ان اختصاصی خود را بسازید و مدیریت کنید.",
     "support_text": "برای پشتیبانی با مدیریت در ارتباط باشید.",
     "card_note": "",
+    "panel_sales_enabled": "1",
+    "panel_warn_percent": "80",
+    "panel_expiry_warn_days": "3",
 }
 
 # (key, label, kind) — kind: bool | int | text. Drives the admin settings screen.
@@ -44,6 +47,9 @@ EDITABLE: tuple[tuple[str, str, str], ...] = (
     ("welcome_text", "📝 متن خوش‌آمد", "text"),
     ("support_text", "📞 متن پشتیبانی", "text"),
     ("card_note", "ℹ️ توضیح کارت به کارت", "text"),
+    ("panel_sales_enabled", "🧩 فروش پنل", "bool"),
+    ("panel_warn_percent", "📉 هشدار مصرف پنل (٪)", "int"),
+    ("panel_expiry_warn_days", "🔔 هشدار انقضای پنل (روز قبل)", "int"),
 )
 EDITABLE_KEYS = {key: (label, kind) for key, label, kind in EDITABLE}
 

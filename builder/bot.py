@@ -17,6 +17,7 @@ from builder.notify import TelethonNotifier
 from builder.security import SecretBox
 from builder.services.lifecycle import expire_stale_payments, run_expiry_pass
 from builder.services.ops import TenantOps
+from builder.services.panels.sync import run_panel_sync
 from builder.services.provisioner import Provisioner
 from builder.settings import Settings
 
@@ -50,6 +51,7 @@ async def run_builder(settings: Settings, stop_event: asyncio.Event | None = Non
     notifier = TelethonNotifier(client)
     ops = TenantOps(db, settings, box, Provisioner(settings))
     app = BuilderApp(settings, db, ops, notifier, box)
+    panels = app.panels
 
     @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
     async def _on_message(event):
@@ -77,7 +79,16 @@ async def run_builder(settings: Settings, stop_event: asyncio.Event | None = Non
         except Exception:
             log.exception("stale payment cleanup failed")
 
+    async def _panel_sync_job():
+        try:
+            counts = await run_panel_sync(db, panels, notifier)
+            if counts["limited"] or counts["expired"] or counts["errors"]:
+                log.info("panel sync: %s", counts)
+        except Exception:
+            log.exception("panel sync failed")
+
     scheduler.add_job(_expiry_job, "interval", minutes=10, max_instances=1, coalesce=True)
+    scheduler.add_job(_panel_sync_job, "interval", minutes=5, max_instances=1, coalesce=True)
     scheduler.add_job(_stale_payments_job, "interval", hours=1, max_instances=1, coalesce=True)
     scheduler.start()
 

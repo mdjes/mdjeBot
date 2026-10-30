@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 
 from app.db.base import AsyncSessionLocal as Session
 from app.db.models.keyboards import KeyboardButton
+from app.utils.text.glass import GLASS_STYLE, glass_text
 
 # Rarely-changing config table — load once into process memory.
 _buttons_by_key: dict[str, KeyboardButton] | None = None
@@ -291,8 +292,15 @@ class KeyboardButtonCRUD:
             async with Session() as session:
                 result = await session.execute(select(KeyboardButton.button_key))
                 existing_keys = set(result.scalars().all())
+                # New installs start with the glass look: the stored label carries the 「 」 brackets and the
+                # row is marked "glass", exactly what the admin panel saves when you pick that style.
                 missing = [
-                    KeyboardButton(button_key=key, button_text=text, description=desc)
+                    KeyboardButton(
+                        button_key=key,
+                        button_text=glass_text(text),
+                        button_style=GLASS_STYLE,
+                        description=desc,
+                    )
                     for key, text, desc in default_buttons
                     if key not in existing_keys
                 ]

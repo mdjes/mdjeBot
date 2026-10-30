@@ -13,6 +13,11 @@ Modifications by Mdje (2026):
     those of Mdje.
   - Added the Bot Builder (builder/, builder_main.py, docker-compose service
     "builder"): a Telegram bot that provisions and bills customer bot instances.
+  - Added panel sales to the Bot Builder: customers buy an admin account on the
+    operator's Pasarguard panel, which is created and connected to their bot
+    automatically (builder/services/panels, app/cli/panel_link.py).
+  - Redesigned the default bot messages and made the default buttons use the
+    "glass" style (app/i18n/locales/fa.json, app/db/crud/keyboards.py).
 
 The original LICENSE text, including the Licensor notice and the Commons
 Clause condition, is kept unchanged in the LICENSE file and continues to

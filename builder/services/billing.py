@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from builder.models import (
     BuilderUser,
     DiscountCode,
+    MasterPanel,
+    PanelPlan,
+    PanelSub,
+    PanelSubStatus,
     Payment,
     PaymentKind,
     PaymentStatus,
@@ -193,6 +197,8 @@ async def create_payment(
     method: str,
     plan_id: int | None = None,
     tenant_id: int | None = None,
+    panel_plan_id: int | None = None,
+    panel_sub_id: int | None = None,
     discount_code: str | None = None,
     status: str = PaymentStatus.PENDING,
     note: str | None = None,
@@ -204,6 +210,8 @@ async def create_payment(
         method=method,
         plan_id=plan_id,
         tenant_id=tenant_id,
+        panel_plan_id=panel_plan_id,
+        panel_sub_id=panel_sub_id,
         discount_code=discount_code,
         status=status,
         note=note,
@@ -221,6 +229,9 @@ class Fulfillment:
     needs_deploy: bool = False
     credited: int = 0
     awaiting_token: bool = False  # paid, but the owner has not sent the bot token yet
+    panel_sub_id: int | None = None
+    panel_plan_id: int | None = None
+    panel_action: str | None = None  # provision | renew | volume — done by PanelOps after the payment
 
 
 async def fulfill_payment(session: AsyncSession, payment: Payment) -> Fulfillment:
@@ -228,6 +239,19 @@ async def fulfill_payment(session: AsyncSession, payment: Payment) -> Fulfillmen
     if payment.kind == PaymentKind.TOPUP:
         await adjust_balance(session, payment.user_id, payment.amount)
         return Fulfillment(credited=payment.amount)
+
+    if payment.kind in PaymentKind.PANEL_KINDS:
+        sub = await session.get(PanelSub, payment.panel_sub_id) if payment.panel_sub_id else None
+        panel_plan = await session.get(PanelPlan, payment.panel_plan_id) if payment.panel_plan_id else None
+        if sub is None or panel_plan is None or sub.status == PanelSubStatus.DELETED:
+            await adjust_balance(session, payment.user_id, payment.amount)  # gone: refund instead of losing it
+            return Fulfillment(credited=payment.amount)
+        action = {
+            PaymentKind.PANEL: "provision",
+            PaymentKind.PANEL_RENEW: "renew",
+            PaymentKind.PANEL_VOLUME: "volume",
+        }[payment.kind]
+        return Fulfillment(panel_sub_id=sub.id, panel_plan_id=panel_plan.id, panel_action=action)
 
     tenant = await session.get(Tenant, payment.tenant_id) if payment.tenant_id else None
     plan = await session.get(Plan, payment.plan_id) if payment.plan_id else None
@@ -268,11 +292,31 @@ async def decide_payment(
 
     if payment.discount_code:
         await release_discount(session, payment.discount_code)
+    if payment.kind == PaymentKind.PANEL and payment.panel_sub_id:
+        sub = await session.get(PanelSub, payment.panel_sub_id)
+        if sub is not None and sub.status == PanelSubStatus.PENDING:
+            sub.status = PanelSubStatus.DELETED
     if payment.kind == PaymentKind.ORDER and payment.tenant_id:
         tenant = await session.get(Tenant, payment.tenant_id)
         if tenant is not None and tenant.status == TenantStatus.PENDING:
             tenant.status = TenantStatus.DELETED
     return payment, Fulfillment()
+
+
+async def charge_wallet(
+    session: AsyncSession, user_id: int, price: int, discount_code: str | None
+) -> tuple[int, str | None]:
+    """Apply a discount code and debit the wallet. Raises (caller rolls back) on a bad code or low balance."""
+    code = None
+    if discount_code:
+        discount = await find_discount(session, discount_code)
+        if discount is None or not await consume_discount(session, discount.code):
+            raise DiscountInvalid
+        code = discount.code
+        price = apply_discount(price, discount.percent)
+    if price > 0 and not await adjust_balance(session, user_id, -price):
+        raise InsufficientBalance
+    return price, code
 
 
 async def purchase_with_wallet(
@@ -285,18 +329,7 @@ async def purchase_with_wallet(
     discount_code: str | None = None,
 ) -> tuple[Payment, Fulfillment]:
     """Pay an order/renewal from the wallet. Raises (caller must roll back) on a bad discount or low balance."""
-    price = plan.price
-    code = None
-    if discount_code:
-        discount = await find_discount(session, discount_code)
-        if discount is None or not await consume_discount(session, discount.code):
-            raise DiscountInvalid
-        code = discount.code
-        price = apply_discount(price, discount.percent)
-
-    if price > 0 and not await adjust_balance(session, user_id, -price):
-        raise InsufficientBalance
-
+    price, code = await charge_wallet(session, user_id, plan.price, discount_code)
     payment = await create_payment(
         session,
         user_id=user_id,
@@ -305,6 +338,32 @@ async def purchase_with_wallet(
         method="wallet",
         plan_id=plan.id,
         tenant_id=tenant.id,
+        discount_code=code,
+        status=PaymentStatus.APPROVED,
+    )
+    payment.decided_at = utcnow()
+    return payment, await fulfill_payment(session, payment)
+
+
+async def purchase_panel_with_wallet(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    kind: str,
+    plan: PanelPlan,
+    sub: PanelSub,
+    discount_code: str | None = None,
+) -> tuple[Payment, Fulfillment]:
+    """Pay a panel purchase / renewal / extra volume from the wallet (same rules as for bots)."""
+    price, code = await charge_wallet(session, user_id, plan.price, discount_code)
+    payment = await create_payment(
+        session,
+        user_id=user_id,
+        kind=kind,
+        amount=price,
+        method="wallet",
+        panel_plan_id=plan.id,
+        panel_sub_id=sub.id,
         discount_code=code,
         status=PaymentStatus.APPROVED,
     )
@@ -332,6 +391,55 @@ async def grant_free(
     return payment, await fulfill_payment(session, payment)
 
 
+# ── panels ────────────────────────────────────────────────────────────────────
+async def list_panel_plans(
+    session: AsyncSession, *, kind: str | None = None, active_only: bool = True, master_id: int | None = None
+) -> list[PanelPlan]:
+    """Plans of enabled master panels (so a disabled panel is never sold)."""
+    stmt = (
+        select(PanelPlan)
+        .join(MasterPanel, MasterPanel.id == PanelPlan.master_id)
+        .order_by(PanelPlan.sort_order, PanelPlan.id)
+    )
+    if active_only:
+        stmt = stmt.where(PanelPlan.active.is_(True), MasterPanel.enabled.is_(True))
+    if kind:
+        stmt = stmt.where(PanelPlan.kind == kind)
+    if master_id:
+        stmt = stmt.where(PanelPlan.master_id == master_id)
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def create_panel_sub(session: AsyncSession, *, owner_id: int, plan: PanelPlan, tenant_id: int | None) -> PanelSub:
+    """The subscription row exists before payment; the admin on the master panel is created once it is paid."""
+    sub = PanelSub(
+        owner_id=owner_id,
+        tenant_id=tenant_id,
+        master_id=plan.master_id,
+        plan_id=plan.id,
+        status=PanelSubStatus.PENDING,
+    )
+    session.add(sub)
+    await session.flush()
+    return sub
+
+
+async def list_owner_panel_subs(session: AsyncSession, owner_id: int) -> list[PanelSub]:
+    stmt = (
+        select(PanelSub)
+        .where(PanelSub.owner_id == owner_id, PanelSub.status.not_in((PanelSubStatus.DELETED, PanelSubStatus.PENDING)))
+        .order_by(PanelSub.id)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def count_owner_panel_subs(session: AsyncSession, owner_id: int) -> int:
+    stmt = select(func.count(PanelSub.id)).where(
+        PanelSub.owner_id == owner_id, PanelSub.status.not_in((PanelSubStatus.DELETED,))
+    )
+    return int((await session.execute(stmt)).scalar_one())
+
+
 # ── reporting ─────────────────────────────────────────────────────────────────
 async def collect_stats(session: AsyncSession) -> dict[str, int]:
     async def count(stmt) -> int:
@@ -344,6 +452,8 @@ async def collect_stats(session: AsyncSession) -> dict[str, int]:
     }
     for status in TenantStatus.LIVE:
         stats[f"tenants_{status}"] = await count(select(func.count(Tenant.id)).where(Tenant.status == status))
+    for status in PanelSubStatus.LIVE:
+        stats[f"panels_{status}"] = await count(select(func.count(PanelSub.id)).where(PanelSub.status == status))
     approved = Payment.status == PaymentStatus.APPROVED
     stats["revenue_total"] = await count(
         select(func.coalesce(func.sum(Payment.amount), 0)).where(approved, Payment.kind != PaymentKind.TOPUP)

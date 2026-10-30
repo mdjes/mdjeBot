@@ -12,6 +12,8 @@ from builder.models import (
     BuilderUser,
     Card,
     DiscountCode,
+    PanelPlan,
+    PanelSub,
     Payment,
     PaymentKind,
     PaymentStatus,
@@ -30,7 +32,14 @@ log = logging.getLogger("builder.admin")
 
 PAGE_SIZE = 8
 BACK: Buttons = [[Btn("🔙 پنل مدیریت", "a:home")]]
-KIND_LABEL = {PaymentKind.TOPUP: "شارژ کیف پول", PaymentKind.ORDER: "ساخت ربات", PaymentKind.RENEW: "تمدید"}
+KIND_LABEL = {
+    PaymentKind.TOPUP: "شارژ کیف پول",
+    PaymentKind.ORDER: "ساخت ربات",
+    PaymentKind.RENEW: "تمدید",
+    PaymentKind.PANEL: "خرید پنل",
+    PaymentKind.PANEL_RENEW: "تمدید پنل",
+    PaymentKind.PANEL_VOLUME: "حجم اضافه پنل",
+}
 
 
 class AdminFlows:
@@ -46,6 +55,7 @@ class AdminFlows:
             [Btn("🤖 ربات‌ها", "a:tenants"), Btn("👥 کاربران", "a:users")],
             [Btn("📦 تعرفه‌ها", "a:plans"), Btn("🏦 کارت‌ها", "a:cards")],
             [Btn("🏷 کدهای تخفیف", "a:codes"), Btn("⚙️ تنظیمات", "a:settings")],
+            [Btn("🧩 فروش پنل", "a:pmenu")],
             [Btn("📢 ارسال همگانی", "a:bc"), Btn("🖥 سرور", "a:server")],
             [Btn("🏠 منوی کاربر", "u:home")],
         ]
@@ -324,6 +334,7 @@ class AdminFlows:
         await ctx.answer("⏳ در حال دیپلوی…")
         result = await self.ops.deploy(int(tenant_id))
         if result.ok:
+            self.panels.link_tenant_panels(int(tenant_id))
             async with self.db.session() as s:
                 tenant = await s.get(Tenant, int(tenant_id))
             await self.activate_for_owner(billing.Fulfillment(tenant_id=tenant.id, needs_deploy=False), tenant.owner_id)
@@ -527,6 +538,9 @@ class AdminFlows:
             user = await s.get(BuilderUser, payment.user_id)
             plan = await s.get(Plan, payment.plan_id) if payment.plan_id else None
             tenant = await s.get(Tenant, payment.tenant_id) if payment.tenant_id else None
+            panel_plan = await s.get(PanelPlan, payment.panel_plan_id) if payment.panel_plan_id else None
+            panel_sub = await s.get(PanelSub, payment.panel_sub_id) if payment.panel_sub_id else None
+            panel_bot = await s.get(Tenant, panel_sub.tenant_id) if panel_sub and panel_sub.tenant_id else None
         who = f"{esc(user.first_name)} (<code>{user.id}</code>)" if user else f"<code>{payment.user_id}</code>"
         lines = [
             f"💳 <b>پرداخت #{payment.id}</b> — {KIND_LABEL.get(payment.kind, payment.kind)}",
@@ -537,6 +551,12 @@ class AdminFlows:
             lines.append(f"تعرفه: {esc(plan.name)} ({plan.duration_days} روز)")
         if tenant:
             lines.append(f"ربات: {esc(self.tenant_label(tenant))}")
+        if panel_plan:
+            lines.append(f"پلن پنل: {esc(panel_plan.name)} ({panel_plan.data_gb} GB)")
+        if panel_sub and panel_sub.admin_username:
+            lines.append(f"ادمین پنل: <code>{esc(panel_sub.admin_username)}</code>")
+        if panel_bot:
+            lines.append(f"ربات متصل‌شونده: {esc(self.tenant_label(panel_bot))}")
         if payment.discount_code:
             lines.append(f"کد تخفیف: {esc(payment.discount_code)}")
         lines.append(f"وضعیت: {payment.status}")

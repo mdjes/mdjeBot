@@ -6,9 +6,11 @@ import pytest
 
 from builder.db import Database
 from builder.services.ops import TenantOps
+from builder.services.panels.ops import PanelOps
 from tests.support.builder_env import (
     FakeDbAdmin,
     FakeNotifier,
+    FakePanelBackend,
     FakeRunner,
     make_box,
     make_provisioner,
@@ -26,6 +28,8 @@ class BuilderEnv:
     notifier: FakeNotifier
     prov: object
     ops: TenantOps
+    backend: FakePanelBackend
+    panels: PanelOps
 
 
 @pytest.fixture
@@ -37,7 +41,9 @@ async def env(tmp_path):
     prov = make_provisioner(settings, runner, db_admin)
     box = make_box(settings)
     ops = TenantOps(db, settings, box, prov)
-    yield BuilderEnv(db, settings, box, runner, db_admin, FakeNotifier(), prov, ops)
+    backend = FakePanelBackend()
+    panels = PanelOps(db, box, backend, prov, link_attempts=2, link_delay=0)
+    yield BuilderEnv(db, settings, box, runner, db_admin, FakeNotifier(), prov, ops, backend, panels)
     await db.dispose()
 
 
@@ -51,4 +57,4 @@ async def app(env):
             raise TokenError("rejected")
         return BotInfo(id=int(token.split(":")[0]), username=f"bot{token.split(':')[0]}", name="Bot")
 
-    return BuilderApp(env.settings, env.db, env.ops, env.notifier, env.box, check_token=check_token)
+    return BuilderApp(env.settings, env.db, env.ops, env.notifier, env.box, check_token=check_token, panels=env.panels)

@@ -62,17 +62,44 @@ async def ensure_mysql_database(url: str) -> None:
         await server_engine.dispose()
 
 
+def _literal(value) -> str | None:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return None
+
+
+def _add_column_sql(dialect, table_name: str, column) -> str:
+    """``ALTER TABLE ... ADD COLUMN`` for a column that older databases do not have yet."""
+    parts = [f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column.type.compile(dialect=dialect)}"]
+    default = getattr(getattr(column, "default", None), "arg", None)
+    literal = _literal(default) if not callable(default) else None
+    if literal is not None:
+        parts.append(f"NOT NULL DEFAULT {literal}" if not column.nullable else f"DEFAULT {literal}")
+    else:
+        parts.append("NULL")  # no scalar default to backfill existing rows with
+    return " ".join(parts)
+
+
 def _upgrade_schema(conn) -> None:
     """Bring a database created by an older builder version up to date (create_all never alters tables)."""
     inspector = inspect(conn)
-    if "builder_tenants" not in inspector.get_table_names():
-        return
-    columns = {column["name"]: column for column in inspector.get_columns("builder_tenants")}
-    if "pending_days" not in columns:
-        conn.execute(text("ALTER TABLE builder_tenants ADD COLUMN pending_days INTEGER NOT NULL DEFAULT 0"))
-    if conn.dialect.name == "mysql":
+    existing = set(inspector.get_table_names())
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing:
+            continue
+        present = {column["name"]: column for column in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name not in present:
+                conn.execute(text(_add_column_sql(conn.dialect, table.name, column)))
+
+    if "builder_tenants" in existing and conn.dialect.name == "mysql":
+        columns = {column["name"]: column for column in inspector.get_columns("builder_tenants")}
         # A tenant now exists before its bot token does (purchase first, token afterwards).
-        if not columns["bot_id"]["nullable"]:
+        if "bot_id" in columns and not columns["bot_id"]["nullable"]:
             conn.execute(text("ALTER TABLE builder_tenants MODIFY bot_id BIGINT NULL"))
-        if not columns["token_enc"]["nullable"]:
+        if "token_enc" in columns and not columns["token_enc"]["nullable"]:
             conn.execute(text("ALTER TABLE builder_tenants MODIFY token_enc TEXT NULL"))
