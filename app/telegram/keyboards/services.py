@@ -11,6 +11,7 @@ from app.services.panels.settings import (
     panel_has_time_plans,
     panel_has_volume_plans,
 )
+from app.telegram.keyboards.home import home_back_button
 
 from .common import (
     _get_keyboard_button_config,
@@ -207,5 +208,8 @@ async def create_inline_service_buttons(services, panel=None, settings=None, adm
         rows.append(KeyboardInlineButtonRow(first_row_buttons))
     if admin or (settings.info_mode and panel_button_enabled(get_panel, "btn_info")):
         rows.append(KeyboardInlineButtonRow([web]))
+
+    if not admin:
+        back_buttons.append(KeyboardInlineButtonRow([home_back_button()]))
 
     return ReplyInlineMarkup(rows + active_button_rows + back_buttons)

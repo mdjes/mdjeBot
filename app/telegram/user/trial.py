@@ -29,7 +29,7 @@ from app.telegram.keyboards.common import (
     styled_copy_button,
     styled_webview_button,
 )
-from app.telegram.keyboards.home import bhome_buttons
+from app.telegram.keyboards.home import bhome_buttons, home_back_button
 from app.telegram.plugins import PluginContext
 from app.telegram.shared.guards.channel_gate import ensure_channel_membership, extract_start_param
 from app.telegram.shared.utils.logging import send_log_message
@@ -86,6 +86,7 @@ def _trial_picker_buttons(panels) -> ReplyInlineMarkup:
                 ]
             )
         )
+    rows.append(KeyboardInlineButtonRow([home_back_button()]))
     return ReplyInlineMarkup(rows)
 
 

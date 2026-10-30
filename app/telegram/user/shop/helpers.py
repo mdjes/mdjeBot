@@ -51,7 +51,7 @@ from app.telegram.keyboards.buy import (
     buy_custom_button,
 )
 from app.telegram.keyboards.common import styled_copy_button, styled_webview_button
-from app.telegram.keyboards.home import bhome_buttons
+from app.telegram.keyboards.home import bhome_buttons, home_back_button
 from app.telegram.shared.keyboards.duration_buttons import build_duration_selection_button_rows
 from app.telegram.shared.keyboards.panel_buttons import build_panel_display_button
 from app.telegram.shared.keyboards.plan_buttons import build_plan_inline_button
@@ -137,6 +137,7 @@ async def generate_volume_buttons(panel_code, duration=None, duration_group=None
         if not volume_buttons:
             return [[Button.inline("❌ هیچ پلنی برای این پنل یافت نشد", data="no_plans")]]
         volume_buttons.append([await buy_back_button(back_data)])
+        volume_buttons.append([home_back_button()])
         return volume_buttons
     except Exception as e:
         logger.error(f"خطا در دریافت داده‌ها: {e}")
@@ -259,6 +260,7 @@ async def show_buy_vpn_plans(event, panel, *, lang: str = "fa", back_data: str =
             else:
                 buttons.append(custom_row)
                 buttons.append(back_row)
+        buttons.append([home_back_button()])
         message = await get_bot_text(
             key="buy_select_duration_message",
             default=DEFAULT_BOT_TEXTS["buy_select_duration_message"],

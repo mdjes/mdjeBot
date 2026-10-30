@@ -12,6 +12,7 @@ from telethon.tl.types import InputMediaDice
 
 from app.db.crud.user import UserCRUD, update_Money
 from app.logger import LogType, get_logger
+from app.telegram.keyboards.home import home_back_button
 from app.telegram.plugins import PluginContext
 from app.telegram.shared.utils.logging import send_log_message
 from app.telegram.shared.utils.maintenance import bot_is_offline
@@ -70,7 +71,7 @@ def _win_text(how: str, prize: int) -> str:
 
 
 def _balance_button(label: str, amount: int) -> list:
-    return [Button.inline(f"💳 {label}: {amount:,} تومان", data="no_action")]
+    return [[Button.inline(f"💳 {label}: {amount:,} تومان", data="no_action")], [home_back_button()]]
 
 
 def _menu_buttons() -> list:
@@ -78,6 +79,7 @@ def _menu_buttons() -> list:
         [Button.inline("🎲 تاس", "game_dice"), Button.inline("🎯 دارت", "game_darts")],
         [Button.inline("🏀 بسکتبال", "game_basketball"), Button.inline("⚽ فوتبال", "game_football")],
         [Button.inline("✂️ سنگ کاغذ قیچی", "game_rps"), Button.inline("🎳 بولینگ", "game_bowling")],
+        [home_back_button()],
     ]
 
 
@@ -85,6 +87,7 @@ def _rps_buttons() -> list:
     return [
         [Button.inline("🪨 سنگ", "rps_rock"), Button.inline("📄 کاغذ", "rps_paper")],
         [Button.inline("✂️ قیچی", "rps_scissors")],
+        [home_back_button()],
     ]
 
 

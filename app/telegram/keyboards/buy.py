@@ -3,6 +3,7 @@
 from telethon.tl.types import KeyboardInlineButtonRow, ReplyInlineMarkup
 
 from app.db.crud.keyboards import KeyboardButtonCRUD
+from app.telegram.keyboards.home import home_back_button
 
 from .common import _get_keyboard_button_config, styled_callback_button
 from .registry import KEYBOARD_BUTTON_DEFAULT_STYLES, KEYBOARD_BUTTON_DEFAULTS
@@ -121,6 +122,7 @@ async def build_ms_renew_confirm_button_rows(
         [
             KeyboardInlineButtonRow([await ms_renew_discount_button(discount_data)]),
             KeyboardInlineButtonRow([await ms_renew_back_button(back_data), confirm]),
+            KeyboardInlineButtonRow([home_back_button()]),
         ]
     )
 
@@ -129,6 +131,7 @@ async def build_buy_service_selection_rows(service_buttons: list, *, columns: in
     """English docstring for build_buy_service_selection_rows."""
     rows = [service_buttons[i : i + columns] for i in range(0, len(service_buttons), columns)]
     rows.append([await buy_cancel_button("DataCancel")])
+    rows.append([home_back_button()])
     return rows
 
 
@@ -145,6 +148,7 @@ async def build_buy_confirm_button_rows(
         rows.append([await buy_discount_button(discount_data)])
     confirm = await (buy_topup_button if topup else buy_confirm_button)(confirm_data)
     rows.append([await buy_cancel_button(cancel_data), confirm])
+    rows.append([home_back_button()])
     return rows
 
 
@@ -152,4 +156,5 @@ async def build_buy_username_prompt_rows() -> list:
     return [
         [await buy_default_username_button(b"generate_username")],
         [await buy_cancel_button(b"DataCancel")],
+        [home_back_button()],
     ]

@@ -21,7 +21,7 @@ from app.services.billing.renewal import (
 )
 from app.telegram.keyboards.buy import buy_topup_button
 from app.telegram.keyboards.common import is_keyboard_config_step
-from app.telegram.keyboards.home import bhome_buttons
+from app.telegram.keyboards.home import bhome_buttons, home_back_button
 from app.telegram.shared.guards.channel_gate import ensure_channel_membership
 from app.telegram.shared.utils.logging import send_log_message
 from app.telegram.shared.utils.maintenance import bot_is_offline
@@ -76,7 +76,10 @@ async def service_message_handler(event: Message):
         if error:
             await event.respond(
                 error,
-                buttons=[[Button.inline("📋 بازگشت به همه سرویس‌ها", data=states.SERVICE_SEARCH_CLEAR_CALLBACK)]],
+                buttons=[
+                    [Button.inline("📋 بازگشت به همه سرویس‌ها", data=states.SERVICE_SEARCH_CLEAR_CALLBACK)],
+                    [home_back_button()],
+                ],
             )
             raise events.StopPropagation
 

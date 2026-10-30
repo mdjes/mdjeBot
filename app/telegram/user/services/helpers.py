@@ -106,7 +106,7 @@ async def display_user_services(user_id, current_page, edit_message=False, origi
         no_services_text = await get_bot_text(
             key="no_services_message", default=DEFAULT_BOT_TEXTS["no_services_message"], lang="fa"
         )
-        buy_button = [await buy_empty_list_button()]
+        buy_button = [[await buy_empty_list_button()], [home_back_button()]]
         await Mdje.send_message(entity=user_id, message=no_services_text, buttons=buy_button)
         return
 
@@ -154,8 +154,7 @@ async def display_user_services(user_id, current_page, edit_message=False, origi
     if navigation_buttons:
         buttons.append(navigation_buttons)
     buttons.append([Button.inline("🔍 جستجوی سرویس", data=SERVICE_SEARCH_START_CALLBACK)])
-    if edit_message:
-        buttons.append([home_back_button()])
+    buttons.append([home_back_button()])
 
     if edit_message and original_event:
         await Mdje.edit_message(
@@ -225,6 +224,7 @@ async def display_user_service_search_results(
         [
             [Button.inline("🔄 جستجوی جدید", data=SERVICE_SEARCH_AGAIN_CALLBACK)],
             [Button.inline("📋 همه سرویس‌ها", data=SERVICE_SEARCH_CLEAR_CALLBACK)],
+            [home_back_button()],
         ]
     )
 
@@ -539,6 +539,7 @@ async def display_subscription_links(
             link_buttons.append([await ms_sub_links_get_all_button(service_code)])
         _back_links = back_data or await _back_to_service(event.sender_id, service_code)
         link_buttons.append([await ms_sub_links_back_button(_back_links)])
+        link_buttons.append([home_back_button()])
 
         message = ""
         if selected_index is not None and 0 <= selected_index < len(links):
@@ -556,7 +557,7 @@ async def display_subscription_links(
 
 async def display_subscription_clients(event, service_code: str, *, back_data: str | None = None) -> None:
     back = back_data or await _back_to_service(event.sender_id, service_code)
-    buttons = [[Button.inline("بازگشت", data=back)]]
+    buttons = [[Button.inline("بازگشت", data=back)], [home_back_button()]]
 
     try:
         service, serv_msg = await ServiceCRUD().get_service(code=service_code)
@@ -708,6 +709,7 @@ async def display_usage_chart(
             daily_points=daily_points,
             back_data=_back,
         )
+        buttons.append([home_back_button()])
         with contextlib.suppress(MessageNotModifiedError):
             await event.edit(message, buttons=buttons, parse_mode="md")
     except MessageNotModifiedError:
@@ -770,6 +772,7 @@ async def display_usage_chart_day(
             page=page,
             back_data=_back,
         )
+        buttons.append([home_back_button()])
         with contextlib.suppress(MessageNotModifiedError):
             await event.edit(message, buttons=buttons, parse_mode="md")
     except MessageNotModifiedError:

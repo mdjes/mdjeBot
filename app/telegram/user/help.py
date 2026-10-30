@@ -110,7 +110,7 @@ async def help_download_ios_callback(event: events.CallbackQuery.Event):
         if app_key not in ios_apps:
             await event.answer("❌ لینک اپ استور یافت نشد!", alert=True)
             return
-        buttons = [[Button.inline("بازگشت", "backTOhelp")]]
+        buttons = [[Button.inline("بازگشت", "backTOhelp")], [home_back_button()]]
         try:
             await event.edit(f"دانلود از اپ استور:\n\n{ios_apps[app_key]}", buttons=buttons)
         except MessageNotModifiedError:
@@ -160,7 +160,7 @@ async def help_menu_handler(event: Message):
     await Mdje.send_message(
         entity=user_id,
         message=help_message_text,
-        buttons=await get_help_buttons(user_id),
+        buttons=[*await get_help_buttons(user_id), [home_back_button()]],
     )
     raise events.StopPropagation
 
