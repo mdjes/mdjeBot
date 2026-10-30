@@ -1,10 +1,10 @@
-"""Every button of the admin reply menus, as plain data.
+"""Every button of the admin inline menus, as plain data.
 
 Kept free of imports from the rest of the app so both the keyboard registry (which lists the buttons for
 renaming) and the database seeding can read it without an import cycle.
 
-``label`` is the plain text the admin handlers match on. What the admin *sees* may differ (glass brackets, a
-new name), and the admin middleware translates a press back to ``label`` before any handler runs.
+``label`` is the plain text the admin handlers match on. What the admin *sees* may differ (a new name), and
+the admin middleware translates a press back to ``label`` before any handler runs.
 """
 
 from __future__ import annotations
