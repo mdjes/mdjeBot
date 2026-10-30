@@ -18,14 +18,15 @@ class Base(DeclarativeBase):
 
 
 class TenantStatus:
-    PENDING = "pending"  # created, waiting for payment / first deploy
+    PENDING = "pending"  # slot created, waiting for the payment to be approved
+    AWAITING_TOKEN = "awaiting_token"  # paid (or trial): the owner still has to send the bot token
     RUNNING = "running"
     STOPPED = "stopped"  # stopped by an admin; not touched by the expiry job
     EXPIRED = "expired"  # subscription ended, container stopped, waiting for renewal
     ERROR = "error"  # paid, but the deploy failed; an admin can retry
     DELETED = "deleted"
 
-    LIVE = (PENDING, RUNNING, STOPPED, EXPIRED, ERROR)
+    LIVE = (PENDING, AWAITING_TOKEN, RUNNING, STOPPED, EXPIRED, ERROR)
 
 
 class PaymentKind:
@@ -69,9 +70,12 @@ class Tenant(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, index=True)
     plan_id: Mapped[int | None] = mapped_column(ForeignKey("builder_plans.id"), nullable=True)
-    bot_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # Unknown until the owner sends the bot token (a purchase creates the tenant first).
+    bot_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     bot_username: Mapped[str] = mapped_column(String(64), default="")
-    token_enc: Mapped[str] = mapped_column(Text)
+    token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Paid days not yet applied: the subscription clock starts when the bot is actually running.
+    pending_days: Mapped[int] = mapped_column(Integer, default=0)
     db_password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     admin_ids: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default=TenantStatus.PENDING, index=True)

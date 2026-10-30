@@ -7,13 +7,11 @@
 [![Telethon](https://img.shields.io/badge/Telethon-1.44+-0088cc?logo=telegram)](https://github.com/LonamiWebs/Telethon)
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue?logo=github)](https://mdjes.github.io/mdjeBot/)
 
-Bot de venta de VPN basado en el panel [Pasargard Panel](https://github.com/PasarGuard/panel), desarrollado y mantenido por **Mdje**.
+**Creador de bots** de Telegram para bots de venta de VPN sobre el panel [Pasargard Panel](https://github.com/PasarGuard/panel), desarrollado y mantenido por **Mdje**.
+
+Tú defines el plan mensual; el cliente lo compra, crea un bot en @BotFather y te envía su **token**; el creador convierte este mismo código en un **bot de ventas independiente** para él (contenedor, base de datos y Redis propios).
 
 **[Documentación completa (Persa)](https://mdjes.github.io/mdjeBot/)**
-
-> [!IMPORTANT]
-> **Este bot es completamente gratuito.** Si alguien te lo vendió, fuiste estafado.
-> La versión oficial solo se publica en este GitHub y en el canal [@Mdje](https://t.me/Mdje); denuncia al vendedor allí.
 
 ## Instalación rápida (Linux)
 

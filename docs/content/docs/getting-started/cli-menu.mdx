@@ -11,45 +11,45 @@ mdjebot
 ```
 
 <CliPanel title="MdjeBot — manager">
-{`MdjeBot — manager v1.3.2
+{`MdjeBot Builder — manager v1.4.0
 
   Manager script:  v1.3.2
   Host OS:         Ubuntu 24.04 LTS
   Install mode:    docker
   Branch:          main
-  Bot version:     …
-  Bot runtime:     running (4/4 services running)
-  API port:        6160
+  Version:         …
+  Builder:         running
+  Customer bots:   3 running
   Config:          /opt/mdjebot
 
   ● Status: Installed (docker)
 
   ┌─────────────────────────────────────────────┐
-  │   1) Install bot                            │
-  │   2) Uninstall bot                          │
-  │   3) Update bot                             │
+  │   1) Install Bot Builder                    │
+  │   2) Uninstall                              │
+  │   3) Update                                 │
   │   4) View logs                              │
   │   5) Edit .env file                         │
   │   6) Edit docker-compose.yml                │
   │   7) Full restart                           │
   │   8) Service status                         │
-  │   9) Show webhook & URLs                    │
+  │   9) Show URLs & ports                      │
   │  10) Update manager script                  │
   │  11) Fix Docker network                     │
-  │  12) Get SSL certificate (AutoSSL)          │
+  │  12) Builder settings (token / admins)      │
   │   0) Exit                                   │
   └─────────────────────────────────────────────┘
 
   Select an option: `}
 </CliPanel>
 
-بالای منو نسخهٔ اسکریپت، سیستم‌عامل، حالت نصب، برنچ، نسخهٔ ربات، وضعیت کانتینرها و پورت API نمایش داده می‌شود. در همهٔ سؤال‌های `(y/N)` زدن Enter یعنی **خیر** و در `(Y/n)` یعنی **بله**.
+بالای منو نسخهٔ اسکریپت، سیستم‌عامل، حالت نصب، برنچ، نسخه، وضعیت ربات‌ساز و تعداد ربات‌های مشتریِ در حال اجرا نمایش داده می‌شود. در همهٔ سؤال‌های `(y/N)` زدن Enter یعنی **خیر** و در `(Y/n)` یعنی **بله**.
 
 ---
 
-## ۱) Install bot — نصب [#install]
+## ۱) Install Bot Builder — نصب [#install]
 
-حالت نصب (Docker؛ Native فعلاً غیرفعال است) و برنچ (`main` یا `dev`) را می‌پرسد و ربات را نصب می‌کند. اگر قبلاً نصب شده باشد:
+حالت نصب (Docker) و برنچ (`main` یا `dev`) را می‌پرسد، بعد `API_ID`/`API_HASH`، توکن ربات‌ساز و آیدی ادمین را می‌گیرد و ربات‌ساز را نصب می‌کند. اگر قبلاً نصب شده باشد:
 
 ```text
 Continue (will keep existing .env and data)? (y/N):
@@ -59,7 +59,7 @@ Continue (will keep existing .env and data)? (y/N):
 
 ---
 
-## ۲) Uninstall bot — حذف [#uninstall]
+## ۲) Uninstall — حذف [#uninstall]
 
 <CliPanel title="Uninstall (Docker)">
 {`⚠  Uninstall MdjeBot (Docker)
@@ -86,7 +86,7 @@ Choice: `}
 
 ---
 
-## ۳) Update bot — بروزرسانی [#update]
+## ۳) Update — بروزرسانی [#update]
 
 ```bash
 mdjebot update
@@ -244,29 +244,27 @@ mdjebot status
 
 ---
 
-## ۹) Show webhook & URLs — وب‌هوک و آدرس‌ها [#urls]
+## ۹) Show URLs & ports — آدرس‌ها و پورت‌ها [#urls]
 
 ```bash
 mdjebot urls
 ```
 
-<CliPanel title="Webhook & URLs">
-{`[*] Webhook (set in Pasarguard panel):
-  URL:     http://SERVER_IP:6160/api/webhook
-  Header:  x-webhook-secret: <from DB table secrets, name=webhook_secret>
-  Note:   crypto_key / webhook_secret are stored in DB (not .env)
+<CliPanel title="URLs & ports">
+{`[*] Bot Builder:
+  Telegram:      open your builder bot and send /start (admins: /admin)
+  Customer bots: one container each, host ports 7000-7999
 
 [*] phpMyAdmin:
   URL:  http://SERVER_IP:6163
 
-[!] Replace the IP with your domain if you use one.`}
+[!] Open only the ports you need in your firewall; set your domain/IP in the builder bot's settings.`}
 </CliPanel>
 
-- آی‌پی عمومی سرور خودکار تشخیص داده می‌شود و پورت از `FASTAPI_PORT` خوانده می‌شود.
-- آدرس‌ها **همیشه با `http://`** چاپ می‌شوند. اگر SSL دارید، `https://` و دامنه را خودتان جایگزین کنید.
-- خود مقدار Secret چاپ **نمی‌شود**. در phpMyAdmin وارد دیتابیس `mdjebot` شوید، جدول `secrets` را باز کنید و مقدار `value` ردیف `webhook_secret` را کپی کنید (یوزر و رمز ورود phpMyAdmin در `.env`: `MARIADB_USER` / `MARIADB_PASSWORD`).
+- آی‌پی عمومی سرور خودکار تشخیص داده می‌شود.
+- رمز ورود phpMyAdmin همان کاربر root دیتابیس است (`MARIADB_ROOT_PASSWORD` در `.env`).
 
-راهنمای ست کردن در پنل: [اطلاع‌رسانی حجم و زمان](/docs/admin/panels/notifications).
+راهنمای ربات‌ساز: [ربات‌ساز](/docs/builder).
 
 ---
 
@@ -314,13 +312,20 @@ Choice: `}
 
 ---
 
-## ۱۲) Get SSL certificate (AutoSSL) [#ssl]
+## ۱۲) Builder settings — تنظیمات ربات‌ساز [#builder]
 
 ```bash
-mdjebot ssl
+mdjebot builder
 ```
 
-ابزار [AutoSSL](https://github.com/AmirKenzo/Auto-SSL-Domain) را (اگر نصب نباشد) نصب و `autossl issue` را اجرا می‌کند تا گواهی Let's Encrypt بگیرید. با انتخاب مقصد **MdjeBot** گواهی در `/var/lib/mdjebot/certs/<دامنه>/` قرار می‌گیرد. راهنمای کامل: [دامنه و SSL](/docs/getting-started/ssl).
+| گزینه | کار |
+|-------|-----|
+| `1` Restart builder | ری‌استارت کانتینر `mdjebot-builder` |
+| `2` View builder logs | ۲۰۰ خط آخر لاگ ربات‌ساز |
+| `3` Change builder token / admin IDs | توکن و آیدی ادمین(های) ربات‌ساز را عوض می‌کند و ربات‌ساز را دوباره بالا می‌آورد |
+| `4` List customer bot containers | فهرست کانتینر ربات‌های مشتری با وضعیت و پورت |
+
+ربات‌های مشتری با تغییر یا ری‌استارت ربات‌ساز دست‌نخورده می‌مانند.
 
 ---
 
@@ -337,10 +342,10 @@ mdjebot ssl
 | دستور | معادل |
 |-------|-------|
 | `mdjebot` یا `mdjebot menu` | باز کردن منو |
-| `mdjebot install` | ۱) نصب |
+| `mdjebot install` | ۱) نصب ربات‌ساز |
 | `mdjebot uninstall` | ۲) حذف (با زیرمنو و تأیید) |
 | `mdjebot purge` | حذف کامل همه‌چیز، **بدون هیچ سؤال و تأییدی** |
-| `mdjebot update` | ۳) آپدیت ربات |
+| `mdjebot update` | ۳) آپدیت |
 | `mdjebot logs` | لاگ زندهٔ همهٔ سرویس‌ها |
 | `mdjebot edit-env` | ۵) ویرایش `.env` |
 | `mdjebot edit` | ۶) ویرایش docker-compose.yml |

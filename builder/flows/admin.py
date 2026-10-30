@@ -220,7 +220,7 @@ class AdminFlows:
         rows: Buttons = [
             [
                 Btn(
-                    f"{STATUS_LABEL.get(t.status, t.status).split()[0]} #{t.id} @{t.bot_username} · {t.owner_id}",
+                    f"{STATUS_LABEL.get(t.status, t.status).split()[0]} #{t.id} {('@' + t.bot_username) if t.bot_username else '—'} · {t.owner_id}",
                     f"a:tenant:{t.id}",
                 )
             ]
@@ -269,7 +269,7 @@ class AdminFlows:
             return
         left = days_left(tenant.expires_at, utcnow())
         lines = [
-            f"🤖 <b>#{tenant.id} @{esc(tenant.bot_username)}</b>",
+            f"🤖 <b>#{tenant.id} {esc(self.tenant_label(tenant))}</b>",
             f"مالک: <code>{tenant.owner_id}</code>",
             f"وضعیت: {STATUS_LABEL.get(tenant.status, tenant.status)}",
             f"اعتبار تا: {fmt_date(tenant.expires_at)}" + (f" ({left} روز)" if left is not None else ""),
@@ -362,12 +362,21 @@ class AdminFlows:
                 self.clear_state(ctx.user_id)
                 await ctx.reply("ربات پیدا نشد.", BACK)
                 return
-            needs_deploy = tenant.status in (TenantStatus.PENDING, TenantStatus.EXPIRED, TenantStatus.ERROR)
-            billing.extend_tenant(tenant, days)
+            banked = tenant.token_enc is None  # no bot yet: the days start when it is running
+            needs_deploy = not banked and tenant.status in (
+                TenantStatus.PENDING,
+                TenantStatus.EXPIRED,
+                TenantStatus.ERROR,
+            )
+            if banked:
+                tenant.pending_days += days
+            else:
+                billing.extend_tenant(tenant, days)
             owner_id = tenant.owner_id
             await s.commit()
         self.clear_state(ctx.user_id)
-        await self.activate_for_owner(billing.Fulfillment(tenant_id=tenant_id, needs_deploy=needs_deploy), owner_id)
+        if not banked:
+            await self.activate_for_owner(billing.Fulfillment(tenant_id=tenant_id, needs_deploy=needs_deploy), owner_id)
         await self._tenant_screen(ctx, tenant_id, f"✅ {days} روز اضافه شد.")
 
     @route("a:tadm")
@@ -527,7 +536,7 @@ class AdminFlows:
         if plan:
             lines.append(f"تعرفه: {esc(plan.name)} ({plan.duration_days} روز)")
         if tenant:
-            lines.append(f"ربات: @{esc(tenant.bot_username)}")
+            lines.append(f"ربات: {esc(self.tenant_label(tenant))}")
         if payment.discount_code:
             lines.append(f"کد تخفیف: {esc(payment.discount_code)}")
         lines.append(f"وضعیت: {payment.status}")

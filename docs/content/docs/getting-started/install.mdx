@@ -1,10 +1,12 @@
 ---
 title: نصب
-description: نصب مرحله‌به‌مرحله MdjeBot روی سرور لینوکس با اسکریپت مدیریت
+description: نصب مرحله‌به‌مرحله ربات‌ساز (Bot Builder) روی سرور لینوکس با اسکریپت مدیریت
 icon: Download
 ---
 
-این صفحه نصب ربات را از صفر تا اولین `/start` توضیح می‌دهد. نصب کامل حدود ۵ تا ۱۰ دقیقه طول می‌کشد.
+این صفحه نصب **ربات‌ساز** را از صفر تا اولین `/start` توضیح می‌دهد. نصب کامل حدود ۵ تا ۱۰ دقیقه طول می‌کشد.
+
+ربات‌ساز یک ربات تلگرامی است که شما مدیریتش می‌کنید: تعرفهٔ ماهانه تعیین می‌کنید، کاربر تعرفه را می‌خرد، در @BotFather یک ربات می‌سازد و توکنش را برای ربات‌ساز می‌فرستد؛ ربات‌ساز همین سورس را به یک ربات فروش اختصاصی برای او تبدیل می‌کند. توضیح کامل: [ربات‌ساز](/docs/builder).
 
 ## پیش‌نیازها
 
@@ -13,11 +15,11 @@ icon: Download
 | سرور لینوکس | Ubuntu / Debian پیشنهادی است. اسکریپت روی Fedora، CentOS/RHEL، Arch، openSUSE و Alpine هم کار می‌کند (روی سیستم‌های تست‌نشده هشدار می‌دهد) |
 | معماری | `amd64` یا `arm64` (ایمیج‌ها فقط برای این دو ساخته می‌شوند) |
 | دسترسی | `root` یا کاربری با `sudo` (اسکریپت خودش با sudo دوباره اجرا می‌شود) |
-| فضای دیسک | حداقل **۲ گیگابایت** خالی |
-| پورت‌های آزاد | `6160` تا `6163` — جزئیات در [پورت‌ها](/docs/getting-started/ports) |
-| توکن ربات | از [@BotFather](https://t.me/BotFather) |
-| آیدی عددی ادمین | آیدی عددی اکانت تلگرام خودتان (مثلاً با ربات‌های UserInfo) |
-| پنل پاسارگارد | آدرس و یوزر/رمز ادمین (یا API Key) پنل — بعد از نصب از داخل ربات اضافه می‌شود |
+| منابع | هر ربات مشتری حدود ۳۸۴ مگابایت رم می‌گیرد؛ دیسک خالی حداقل **۲ گیگابایت** |
+| پورت‌های آزاد | `6161` تا `6163` برای سرویس‌ها و بازهٔ `7000`–`7999` برای ربات‌های مشتری — جزئیات در [پورت‌ها](/docs/getting-started/ports) |
+| API_ID و API_HASH | اپ شخصی خودتان از [my.telegram.org/apps](https://my.telegram.org/apps) (همهٔ ربات‌های مشتری از همین استفاده می‌کنند) |
+| توکن ربات‌ساز | یک ربات **جدید** از [@BotFather](https://t.me/BotFather) برای خود ربات‌ساز |
+| آیدی عددی ادمین | آیدی عددی اکانت تلگرام خودتان (مثلاً از @userinfobot) |
 
 <Callout type="info" title="Docker لازم نیست از قبل نصب باشد">
 اگر Docker روی سرور نباشد، اسکریپت خودش آن را نصب می‌کند (از `get.docker.com` یا پکیج‌منیجر سیستم).
@@ -48,29 +50,29 @@ mdjebot
 
 منوی مدیریت باز می‌شود:
 
-<CliPanel title="MdjeBot — manager">
-{`MdjeBot — manager v1.3.2
+<CliPanel title="MdjeBot Builder — manager">
+{`MdjeBot Builder — manager
 
-  Manager script : v1.3.2
+  Manager script : v1.4.0
   Host OS        : Ubuntu 24.04 LTS
 
 ● Status: Not installed
 
-┌────────────────────────────────────────┐
-│  1) Install bot                        │
-│  2) Uninstall bot                      │
-│  3) Update bot                         │
-│  4) View logs                          │
-│  5) Edit .env file                     │
-│  6) Edit docker-compose.yml            │
-│  7) Full restart                       │
-│  8) Service status                     │
-│  9) Show webhook & URLs                │
-│ 10) Update manager script              │
-│ 11) Fix Docker network                 │
-│ 12) Get SSL certificate (AutoSSL)      │
-│  0) Exit                               │
-└────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│   1) Install Bot Builder                    │
+│   2) Uninstall                              │
+│   3) Update                                 │
+│   4) View logs                              │
+│   5) Edit .env file                         │
+│   6) Edit docker-compose.yml                │
+│   7) Full restart                           │
+│   8) Service status                         │
+│   9) Show URLs & ports                      │
+│  10) Update manager script                  │
+│  11) Fix Docker network                     │
+│  12) Builder settings (token / admins)      │
+│   0) Exit                                   │
+└─────────────────────────────────────────────┘
   Select an option: `}
 </CliPanel>
 
@@ -83,44 +85,9 @@ mdjebot
 <Steps>
 <Step>
 
-### انتخاب حالت نصب
+### انتخاب حالت نصب و برنچ
 
-<CliPanel title="Install mode">
-{`Install mode
-
-  1) Docker (full stack — Redis/MariaDB/phpMyAdmin/bot in containers)
-  2) Native — temporarily disabled, use Docker for now
-  0) Cancel
-Choice: `}
-</CliPanel>
-
-گزینهٔ **`1`** (Docker) را بزنید. ربات، دیتابیس MariaDB، Redis و phpMyAdmin هر کدام در یک کانتینر جدا بالا می‌آیند.
-
-<Callout type="warn" title="نصب Native فعلاً غیرفعال است">
-گزینهٔ `2` در حال حاضر غیرفعال است و با انتخابش فقط پیام «Native install is temporarily disabled — please use Docker (option 1).» نمایش داده می‌شود. از Docker استفاده کنید.
-</Callout>
-
-</Step>
-<Step>
-
-### انتخاب برنچ
-
-<CliPanel title="Select install branch">
-{`Select install branch
-
-  1) main  (recommended — latest stable)
-  2) dev   (testing only — may be unstable)
-  0) Cancel
-Choice [1]: `}
-</CliPanel>
-
-| انتخاب | معنی |
-|--------|------|
-| **Enter** یا `1` | برنچ `main` — نسخهٔ پایدار (پیشنهادی برای سرور اصلی) |
-| `2` | برنچ `dev` — آخرین تغییرات، فقط برای تست؛ ممکن است ناپایدار باشد |
-| `0` | انصراف |
-
-برنچ انتخابی ذخیره می‌شود و در بروزرسانی‌های بعدی به‌عنوان «Last used branch» پیشنهاد داده می‌شود.
+حالت **Docker** (گزینهٔ `1`) را انتخاب کنید؛ نصب Native برای ربات‌ساز پشتیبانی نمی‌شود. بعد برنچ **`main`** (پایدار) را بزنید (`dev` فقط برای تست است).
 
 </Step>
 <Step>
@@ -129,78 +96,66 @@ Choice [1]: `}
 
 اسکریپت قبل از هر کاری این موارد را چک می‌کند:
 
-- **نصب قبلی:** اگر ربات قبلاً نصب شده باشد می‌پرسد `Continue (will keep existing .env and data)? (y/N):` — با `y` ادامه می‌دهد و `.env` و دیتای قبلی دست نمی‌خورد.
+- **نصب قبلی:** اگر قبلاً نصب شده باشد می‌پرسد `Continue (will keep existing .env and data)? (y/N):` — با `y` ادامه می‌دهد و `.env` و دیتای قبلی دست نمی‌خورد.
 - **فضای دیسک:** حداقل ۲۰۴۸ مگابایت.
-- **Docker:** اگر نصب نباشد نصبش می‌کند و تا ۳۰ ثانیه منتظر بالا آمدن سرویس Docker می‌ماند.
-- **پورت‌ها:** `6160`، `6161`، `6162`، `6163`. اگر یکی توسط برنامهٔ دیگری اشغال باشد می‌پرسد `Continue anyway? (y/N):` (پورت‌هایی که کانتینرهای خود ربات گرفته‌اند نادیده گرفته می‌شوند).
+- **Docker:** اگر نصب نباشد نصبش می‌کند.
+- **پورت‌ها:** `6161`، `6162`، `6163`. اگر یکی توسط برنامهٔ دیگری اشغال باشد می‌پرسد `Continue anyway? (y/N):`.
 
 </Step>
 <Step>
 
-### وارد کردن اطلاعات تلگرام
+### وارد کردن اطلاعات
 
-<CliPanel title="Telegram credentials">
-{`[*] Enter your Telegram credentials:
+<CliPanel title="Credentials">
+{`[*] Telegram API credentials — create your own app at https://my.telegram.org/apps
+  API_ID:
+  API_HASH:
 
-  API_ID (from my.telegram.org) [2040]:
-  API_HASH [b18441a1ff607e10a989891a5462e627]:
-  BOT_TOKEN (from @BotFather):
-  ADMIN_ID (numeric Telegram user ID):`}
+[*] Bot Builder — the bot your customers use to create their own bots.
+  Builder BOT_TOKEN:
+  Your numeric Telegram ID(s), comma separated (see @userinfobot):`}
 </CliPanel>
 
 <CliPrompt
-  label="API_ID (from my.telegram.org) [2040]:"
-  hint="اختیاری. با Enter مقدار عمومی Telegram Desktop (2040) ست می‌شود. پیشنهاد می‌شود API_ID شخصی خودتان را از my.telegram.org بسازید و وارد کنید."
-/>
-
-<CliPrompt
-  label="API_HASH [b18441a1…]:"
-  hint="اختیاری. همراه API_ID از my.telegram.org گرفته می‌شود. Enter = مقدار عمومی."
-/>
-
-<CliPrompt
-  label="BOT_TOKEN (from @BotFather):"
+  label="API_ID / API_HASH:"
   required
-  hint="توکن ربات از @BotFather. اگر خالی بگذارید دوباره پرسیده می‌شود (This value is required)."
+  hint="از my.telegram.org/apps. همهٔ ربات‌های مشتری از همین دو مقدار استفاده می‌کنند، پس اپ شخصی خودتان را بسازید."
 />
 
 <CliPrompt
-  label="ADMIN_ID (numeric Telegram user ID):"
+  label="Builder BOT_TOKEN:"
   required
-  hint="آیدی عددی تلگرام ادمین اصلی. بعداً می‌توانید در .env چند ادمین را با کاما جدا کنید، مثل 111111111,222222222"
+  hint="توکن یک ربات جدید از @BotFather؛ این رباتی است که مشتری‌ها با آن صحبت می‌کنند."
 />
 
-فاصله‌های اضافه خودکار حذف می‌شوند. اگر فایل `.env` از قبل وجود داشته باشد، این مرحله کامل رد می‌شود.
+<CliPrompt
+  label="Your numeric Telegram ID(s):"
+  required
+  hint="آیدی عددی ادمین(های) ربات‌ساز؛ چند آیدی را با کاما جدا کنید، مثل 111111111,222222222"
+/>
+
+اگر فایل `.env` از قبل وجود داشته باشد، این مرحله رد می‌شود.
 
 </Step>
 <Step>
 
 ### ساخت خودکار بقیهٔ تنظیمات
 
-این موارد **پرسیده نمی‌شوند** و خودکار ساخته می‌شوند:
+این موارد **پرسیده نمی‌شوند** و خودکار ساخته می‌شوند: رمز root دیتابیس (تصادفی ۳۲ کاراکتری)، کلید رمزنگاری توکن‌ها (`BUILDER_SECRET_KEY`)، و تگ ایمیج.
 
-| مورد | مقدار |
-|------|--------|
-| دیتابیس MariaDB | دیتابیس و یوزر `mdjebot` با رمز تصادفی ۲۴ کاراکتری؛ رمز root تصادفی ۳۲ کاراکتری |
-| `SQLALCHEMY_DATABASE_URL` | `mysql+asyncmy://mdjebot:…@mariadb:3306/mdjebot` |
-| `REDIS_URL` | `redis://redis:6379/0` |
-| `FASTAPI_PORT` | `6160` |
-| `TELETHON_SESSION_PATH` | `sessions/MdjeSession` |
-| `CRYPTO_KEY` و `WEBHOOK_SECRET` | در **دیتابیس** (جدول `secrets`) با مقدار تصادفی ساخته می‌شوند — نه در `.env` |
-
-رمزهای دیتابیس یک‌بار در ترمینال چاپ می‌شوند. اگر از دستشان دادید، همیشه داخل `/opt/mdjebot/.env` هستند.
+<Callout type="warn" title="از .env بکاپ بگیرید">
+`BUILDER_SECRET_KEY` توکن ربات مشتری‌ها را در دیتابیس رمزنگاری می‌کند. بدون آن، توکن‌های ذخیره‌شده خوانا نیستند. فایل `/opt/mdjebot/.env` را جای امن نگه دارید.
+</Callout>
 
 </Step>
 <Step>
 
 ### بالا آمدن سرویس‌ها
 
-اسکریپت فایل `docker-compose.yml` را از برنچ انتخابی دانلود و اعتبارسنجی می‌کند، ایمیج‌ها را از `ghcr.io/mdjes/mdjebot` می‌کشد و کانتینرها را بالا می‌آورد (تا ۹۰ ثانیه منتظر می‌ماند).
-
-در اولین اجرا، ربات خودش جدول‌های دیتابیس را می‌سازد (`alembic upgrade head`).
+اسکریپت `docker-compose.yml` را دانلود و اعتبارسنجی می‌کند، ایمیج را از `ghcr.io/mdjes/mdjebot` می‌کشد و کانتینرها را بالا می‌آورد: `mdjebot-builder` (ربات‌ساز)، `mdjebot-mariadb`، `mdjebot-redis` و `mdjebot-phpmyadmin`. اگر ربات‌ساز چند ثانیه بعد از شروع بایستد (مثلاً توکن اشتباه است)، آخرین خطوط لاگ را نشان می‌دهد.
 
 <Callout type="info">
-اولین بالا آمدن MariaDB ممکن است چند دقیقه طول بکشد. اگر ربات بلافاصله جواب نداد، یکی دو دقیقه صبر کنید.
+اولین بالا آمدن MariaDB ممکن است چند دقیقه طول بکشد.
 </Callout>
 
 </Step>
@@ -208,58 +163,22 @@ Choice [1]: `}
 
 ### خلاصهٔ نصب و لاگ زنده
 
-در پایان مسیرها، ایمیج، برنچ، پورت‌ها و آدرس وب‌هوک چاپ می‌شود و بعد **لاگ زندهٔ ربات** نمایش داده می‌شود:
-
-```text
-Tailing live logs so you can confirm it came up healthy — press Ctrl+C to stop.
-```
-
-وقتی در لاگ دیدید ربات بالا آمده، `Ctrl+C` بزنید و بعد Enter تا به منو برگردید.
+در پایان مسیرها، ایمیج، پورت‌ها و مراحل بعدی چاپ می‌شود و بعد **لاگ زندهٔ ربات‌ساز** نمایش داده می‌شود. وقتی دیدید `Builder bot connected as @...`، `Ctrl+C` بزنید و بعد Enter تا به منو برگردید.
 
 </Step>
 </Steps>
 
 ---
 
-## اولین ورود به ربات
+## اولین ورود
 
-1. در تلگرام ربات خودتان را باز کنید و `/start` بزنید.
-2. چون آیدی شما در `ADMIN_ID` است، دکمهٔ **⚙️ پنل مدیریت** را می‌بینید (یا دستور `/panel`).
-3. از **📚 منوی پنل ها** پنل پاسارگارد را اضافه کنید — [منوی پنل‌ها](/docs/admin/panels).
-4. از **🗞 ساخت پلن** پلن فروش بسازید — [ساخت پلن](/docs/admin/plans).
-5. از **⚙️ تنظیمات ربات** گزینهٔ **وضعیت فروش** را روشن کنید (پیش‌فرض خاموش است).
-6. از **💳 تنظیمات درگاه** حداقل یک روش پرداخت (کارت یا ارز) تنظیم و از **⚙️ تنظیمات ربات** دکمه‌اش را روشن کنید — [تنظیمات درگاه](/docs/admin/gateway).
-7. کانال‌های لاگ را ست کنید تا رسیدها و بکاپ‌ها جایی ارسال شوند — [مدیریت لاگ‌ها](/docs/admin/logs).
+1. در تلگرام ربات‌سازتان را باز کنید و `/start` بزنید؛ با `/admin` یا دکمهٔ **⚙️ پنل مدیریت** وارد پنل می‌شوید.
+2. از **🏦 کارت‌ها** شمارهٔ کارت دریافت وجه را اضافه کنید.
+3. از **📦 تعرفه‌ها** تعرفهٔ ماهانه را تنظیم کنید (یک تعرفهٔ پیش‌فرض ساخته شده است).
+4. از **⚙️ تنظیمات** دامنه/IP سرور، رم/CPU هر ربات و متن‌ها را ست کنید.
+5. با یک اکانت دیگر **🎁 تست رایگان** را امتحان کنید تا ببینید ساخت ربات کار می‌کند.
 
-مسیر کامل راه‌اندازی در [چک‌لیست راه‌اندازی](/docs/getting-started/first-setup) آمده است.
-
----
-
-## آدرس وب‌هوک و phpMyAdmin
-
-هر وقت لازم شد، از منو گزینهٔ **`9) Show webhook & URLs`** (یا دستور `mdjebot urls`) را بزنید:
-
-<CliPanel title="Webhook & URLs">
-{`[*] Webhook (set in Pasarguard panel):
-  URL:     http://YOUR_IP:6160/api/webhook
-  Header:  x-webhook-secret: <from DB table secrets, name=webhook_secret>
-  Note:   crypto_key / webhook_secret are stored in DB (not .env)
-
-[*] phpMyAdmin:
-  URL:  http://YOUR_IP:6163
-
-[!] Replace the IP with your domain if you use one.`}
-</CliPanel>
-
-- خود مقدار Secret چاپ نمی‌شود؛ آن را از phpMyAdmin بردارید: دیتابیس `mdjebot` ← جدول `secrets` ← ردیفی که `name` آن `webhook_secret` است، ستون `value` (یک رشتهٔ ۶۴ کاراکتری).
-- آدرس و هدر وب‌هوک را در پنل پاسارگارد ست کنید تا اطلاع‌رسانی حجم/زمان دقیق کار کند: [اطلاع‌رسانی حجم و زمان](/docs/admin/panels/notifications)
-- این خروجی همیشه با `http://` چاپ می‌شود؛ اگر SSL دارید خودتان `https://` و دامنه را جایگزین کنید.
-
----
-
-## دامنه، SSL و وب‌اپ
-
-برای **وب‌اپ (Mini App)**، دکمهٔ **🖥 پنل تحت وب** و درگاه **TonPays** حتماً به آدرس **HTTPS** نیاز دارید (تلگرام آدرس http را برای Mini App قبول نمی‌کند). راهنمای کامل: [دامنه و SSL](/docs/getting-started/ssl).
+راهنمای کامل پنل: [ربات‌ساز](/docs/builder).
 
 ---
 
@@ -270,33 +189,34 @@ Tailing live logs so you can confirm it came up healthy — press Ctrl+C to stop
     <File name=".env — تنظیمات اصلی (دسترسی 600)" />
     <File name="docker-compose.yml" />
     <File name="mdjebot.sh — اسکریپت مدیریت" />
-    <File name="fix-docker-netplan.sh" />
     <File name=".install_mode / .install_branch" />
-    <Folder name="logs — app.log و error.log" />
-    <Folder name="sessions — سشن تلگرام" />
+    <Folder name="builder — سشن تلگرام ربات‌ساز" />
+    <Folder name="tenants — پوشهٔ هر ربات مشتری (شامل توکن؛ دسترسی 700)" />
     <Folder name="data" defaultOpen>
-      <Folder name="mariadb — دیتای دیتابیس" />
+      <Folder name="mariadb — دیتای دیتابیس‌ها" />
       <Folder name="redis" />
-      <Folder name="pwa_icons — آیکون‌های وب‌اپ" />
     </Folder>
   </Folder>
-  <Folder name="/var/lib/mdjebot/certs — گواهی‌های SSL" />
 </Files>
 
 | کانتینر | ایمیج | پورت |
 |---------|-------|------|
-| `mdjebot` | `ghcr.io/mdjes/mdjebot` | `6160` (همهٔ اینترفیس‌ها) |
+| `mdjebot-builder` | `ghcr.io/mdjes/mdjebot` | — |
+| `mdjebot-t<شماره>` (هر ربات مشتری) | همان ایمیج | یک پورت از `7000`–`7999` |
 | `mdjebot-mariadb` | `mariadb:12` | `127.0.0.1:6162` |
 | `mdjebot-redis` | `redis:8-alpine` | `127.0.0.1:6161` |
 | `mdjebot-phpmyadmin` | `phpmyadmin:5-apache` | `6163` (همهٔ اینترفیس‌ها) |
+
+<Callout type="warn" title="phpMyAdmin">
+phpMyAdmin به دیتابیس همهٔ مشتری‌ها دسترسی دارد. اگر لازم ندارید، پورت `6163` را در فایروال ببندید یا کانتینرش را متوقف کنید.
+</Callout>
 
 ---
 
 ## مراحل بعدی
 
 <Cards>
-  <Card title="چک‌لیست راه‌اندازی" description="از نصب تا اولین فروش" href="/docs/getting-started/first-setup" />
-  <Card title="پیکربندی (.env)" description="همهٔ متغیرها با توضیح" href="/docs/getting-started/configuration" />
+  <Card title="ربات‌ساز" description="پنل ادمین، تعرفه‌ها، پرداخت و چرخهٔ اشتراک" href="/docs/builder" />
   <Card title="منوی مدیریت سرور" description="آپدیت، لاگ، ری‌استارت، حذف" href="/docs/getting-started/cli-menu" />
-  <Card title="دامنه و SSL" description="برای وب‌اپ و TonPays" href="/docs/getting-started/ssl" />
+  <Card title="پورت‌ها" description="پورت‌های سرویس‌ها و ربات‌های مشتری" href="/docs/getting-started/ports" />
 </Cards>

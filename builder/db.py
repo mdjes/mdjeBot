@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -29,6 +29,7 @@ class Database:
     async def create_all(self) -> None:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(_upgrade_schema)
 
     async def dispose(self) -> None:
         await self.engine.dispose()
@@ -50,3 +51,19 @@ async def ensure_mysql_database(url: str) -> None:
             )
     finally:
         await server_engine.dispose()
+
+
+def _upgrade_schema(conn) -> None:
+    """Bring a database created by an older builder version up to date (create_all never alters tables)."""
+    inspector = inspect(conn)
+    if "builder_tenants" not in inspector.get_table_names():
+        return
+    columns = {column["name"]: column for column in inspector.get_columns("builder_tenants")}
+    if "pending_days" not in columns:
+        conn.execute(text("ALTER TABLE builder_tenants ADD COLUMN pending_days INTEGER NOT NULL DEFAULT 0"))
+    if conn.dialect.name == "mysql":
+        # A tenant now exists before its bot token does (purchase first, token afterwards).
+        if not columns["bot_id"]["nullable"]:
+            conn.execute(text("ALTER TABLE builder_tenants MODIFY bot_id BIGINT NULL"))
+        if not columns["token_enc"]["nullable"]:
+            conn.execute(text("ALTER TABLE builder_tenants MODIFY token_enc TEXT NULL"))

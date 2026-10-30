@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # ── Paths & constants ──────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="1.3.2"
+readonly SCRIPT_VERSION="1.4.0"
 readonly CONFIG_DIR="/opt/mdjebot"
 readonly COMPOSE_FILE="${CONFIG_DIR}/docker-compose.yml"
 readonly ENV_FILE="${CONFIG_DIR}/.env"
@@ -170,22 +170,12 @@ set_env_var() {
     fi
 }
 
-# The Bot Builder service is only part of the stack once BUILDER_BOT_TOKEN is set in .env.
-builder_enabled() {
-    [[ -f "$ENV_FILE" && -n "$(get_env_value BUILDER_BOT_TOKEN)" ]]
-}
-
 docker_compose() {
-    local -a profile_args=()
-    if builder_enabled; then
-        profile_args=(--profile builder)
-    fi
     if docker compose version &>/dev/null; then
         docker compose \
             --project-directory "$CONFIG_DIR" \
             -f "$COMPOSE_FILE" \
             --env-file "$ENV_FILE" \
-            ${profile_args[@]+"${profile_args[@]}"} \
             "$@"
     elif command -v docker-compose &>/dev/null; then
         warn "Using legacy docker-compose; prefer Docker Compose V2 (docker compose)."
@@ -193,7 +183,6 @@ docker_compose() {
             --project-directory "$CONFIG_DIR" \
             -f "$COMPOSE_FILE" \
             --env-file "$ENV_FILE" \
-            ${profile_args[@]+"${profile_args[@]}"} \
             "$@"
     else
         die "Docker Compose not found. Install Docker Compose V2 (docker compose) and retry."
@@ -767,7 +756,7 @@ port_in_use() {
 
 check_required_ports() {
     local port
-    local -a ports=("$FASTAPI_PORT_DEFAULT" "$REDIS_PORT" "$MARIADB_PORT" "$PHPMYADMIN_PORT")
+    local -a ports=("$REDIS_PORT" "$MARIADB_PORT" "$PHPMYADMIN_PORT")
     local busy=0
     local mode="${1:-}"
 
@@ -797,7 +786,7 @@ check_required_ports() {
     done
 
     if (( busy )); then
-        warn "Required ports may be occupied (${FASTAPI_PORT_DEFAULT} FastAPI, ${REDIS_PORT} Redis, ${MARIADB_PORT} MariaDB, ${PHPMYADMIN_PORT} phpMyAdmin)."
+        warn "Required ports may be occupied (${REDIS_PORT} Redis, ${MARIADB_PORT} MariaDB, ${PHPMYADMIN_PORT} phpMyAdmin)."
         read -r -p "Continue anyway? (y/N): " confirm || true
         [[ "${confirm,,}" == "y" ]] || die "Aborted due to occupied ports."
     fi
@@ -805,11 +794,13 @@ check_required_ports() {
 }
 
 ensure_config_dirs() {
-    mkdir -p "$CONFIG_DIR"/{logs,sessions,data/mariadb,data/redis,conf,run,app,phpmyadmin}
+    mkdir -p "$CONFIG_DIR"/{logs,sessions,data/mariadb,data/redis,conf,run,app,phpmyadmin,tenants,builder}
     # 755 so service users (mysql) can traverse; secrets stay in .env mode 600.
     chmod 755 "$CONFIG_DIR"
     chmod 755 "$RUN_DIR" "$CONF_DIR" "${CONFIG_DIR}/data" 2>/dev/null || true
     chmod 750 "${CONFIG_DIR}/data/mariadb" "${CONFIG_DIR}/data/redis" 2>/dev/null || true
+    # customer bot configs (they contain bot tokens) and the builder session
+    chmod 700 "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder" 2>/dev/null || true
     if [[ -f "$ENV_FILE" ]]; then
         chmod 600 "$ENV_FILE" || true
     fi
@@ -989,23 +980,21 @@ detect_server_ip() {
 show_service_urls() {
     [[ -f "$ENV_FILE" ]] || return 0
 
-    local ip fastapi_port webhook_url pma_url
+    local ip pma_url port_start port_end
     ip="$(detect_server_ip)"
-    fastapi_port="$(get_env_value "FASTAPI_PORT")"
-    fastapi_port="${fastapi_port:-$FASTAPI_PORT_DEFAULT}"
-    webhook_url="http://${ip}:${fastapi_port}/api/webhook"
     pma_url="http://${ip}:${PHPMYADMIN_PORT}"
+    port_start="$(get_env_value "BUILDER_PORT_START")"
+    port_end="$(get_env_value "BUILDER_PORT_END")"
 
     echo
-    info "Webhook (set in Pasarguard panel):"
-    echo -e "  ${C_DIM}URL:${C_RESET}     ${webhook_url}"
-    echo -e "  ${C_DIM}Header:${C_RESET}  x-webhook-secret: <from DB table secrets, name=webhook_secret>"
-    echo -e "  ${C_DIM}Note:${C_RESET}   crypto_key / webhook_secret are stored in DB (not .env)"
+    info "Bot Builder:"
+    echo -e "  ${C_DIM}Telegram:${C_RESET}   open your builder bot and send /start (admins: /admin)"
+    echo -e "  ${C_DIM}Customer bots:${C_RESET} one container each, host ports ${port_start:-7000}-${port_end:-7999}"
     echo
     info "phpMyAdmin:"
     echo -e "  ${C_DIM}URL:${C_RESET}  ${pma_url}"
     echo
-    warn "Replace the IP with your domain if you use one."
+    warn "Open only the ports you need in your firewall; set your domain/IP in the builder bot's settings."
 }
 
 get_container_state() {
@@ -1046,12 +1035,12 @@ get_bot_runtime_summary() {
     total="$(docker_compose ps -a -q 2>/dev/null | wc -l | tr -d ' ' || true)"
     running="${running:-0}"
     total="${total:-0}"
-    bot_state="$(get_container_state mdjebot)"
+    bot_state="$(get_container_state mdjebot-builder)"
     printf '%s (%s/%s services running)' "$bot_state" "$running" "$total"
 }
 
 show_install_info() {
-    local installed_ver bot_runtime fastapi_port mode
+    local installed_ver bot_runtime mode
 
     echo -e "  ${C_DIM}Manager script:${C_RESET}  $(format_version "$SCRIPT_VERSION")"
     echo -e "  ${C_DIM}Host OS:${C_RESET}         ${OS_PRETTY_NAME:-unknown}"
@@ -1060,14 +1049,12 @@ show_install_info() {
         mode="$(get_install_mode)"
         installed_ver="$(get_installed_bot_version)" || installed_ver="—"
         bot_runtime="$(get_bot_runtime_summary)" || bot_runtime="—"
-        fastapi_port="$(get_env_value "FASTAPI_PORT")"
-        fastapi_port="${fastapi_port:-$FASTAPI_PORT_DEFAULT}"
 
         echo -e "  ${C_DIM}Install mode:${C_RESET}    ${mode:-unknown}"
         echo -e "  ${C_DIM}Branch:${C_RESET}         $(get_repo_branch)"
-        echo -e "  ${C_DIM}Bot version:${C_RESET}     ${installed_ver}"
-        echo -e "  ${C_DIM}Bot runtime:${C_RESET}     ${bot_runtime}"
-        echo -e "  ${C_DIM}API port:${C_RESET}        ${fastapi_port}"
+        echo -e "  ${C_DIM}Version:${C_RESET}         ${installed_ver}"
+        echo -e "  ${C_DIM}Builder:${C_RESET}         ${bot_runtime}"
+        echo -e "  ${C_DIM}Customer bots:${C_RESET}   $(count_customer_bots)"
         echo -e "  ${C_DIM}Config:${C_RESET}          ${CONFIG_DIR}"
     fi
     echo
@@ -1075,8 +1062,8 @@ show_install_info() {
 
 draw_banner() {
     safe_clear
-    echo -e "${C_CYAN}${C_BOLD}MdjeBot${C_RESET} ${C_DIM}— manager $(format_version "$SCRIPT_VERSION")${C_RESET}"
-    echo -e "${C_GREEN}This bot is free. If you paid for it, you were scammed — report it: https://t.me/Mdje${C_RESET}"
+    echo -e "${C_CYAN}${C_BOLD}MdjeBot Builder${C_RESET} ${C_DIM}— manager $(format_version "$SCRIPT_VERSION")${C_RESET}"
+    echo -e "${C_GREEN}Builds a sales bot for each of your customers — they buy a plan, send a bot token, done.${C_RESET}"
     echo
     show_install_info || true
 }
@@ -1113,29 +1100,22 @@ draw_menu() {
     fi
     echo
     menu_border "┌" "┐"
-    menu_row " 1) Install bot"
-    menu_row " 2) Uninstall bot"
-    menu_row " 3) Update bot"
+    menu_row " 1) Install Bot Builder"
+    menu_row " 2) Uninstall"
+    menu_row " 3) Update"
     menu_row " 4) View logs"
     menu_row " 5) Edit .env file"
     menu_row " 6) Edit docker-compose.yml"
     menu_row " 7) Full restart"
     menu_row " 8) Service status"
-    menu_row " 9) Show webhook & URLs"
+    menu_row " 9) Show URLs & ports"
     menu_row "10) Update manager script"
     if [[ "$mode" == "native" ]]; then
         menu_row "11) Fix Docker network (Docker only)" dim
     else
         menu_row "11) Fix Docker network"
     fi
-    menu_row "12) Get SSL certificate (AutoSSL)"
-    if [[ "$mode" == "native" ]]; then
-        menu_row "13) Bot Builder (Docker only)" dim
-    elif builder_enabled; then
-        menu_row "13) Bot Builder (enabled)"
-    else
-        menu_row "13) Bot Builder (enable / manage)"
-    fi
+    menu_row "12) Builder settings (token / admins)"
     menu_row " 0) Exit"
     menu_border "└" "┘"
     echo
@@ -1180,12 +1160,16 @@ append_deploy_paths() {
     set_env_var "$ENV_FILE" "MDJEBOT_CONFIG_DIR" "$CONFIG_DIR"
 }
 
+generate_fernet_key() {
+    openssl rand -base64 32 | tr '+/' '-_' | tr -d '\r\n'
+}
+
 generate_env_file() {
     local install_mode="${1:-docker}"
     local branch="${2:-$(get_repo_branch)}"
-    local api_id api_hash bot_token admin_id
+    local api_id api_hash builder_token admin_id
     local db_pass db_root_pass
-    local tmp db_host redis_url env_url
+    local tmp env_url
 
     if [[ -f "$ENV_FILE" ]]; then
         warn ".env already exists — keeping the existing file."
@@ -1211,22 +1195,22 @@ generate_env_file() {
     fi
 
     echo
-    info "Enter your Telegram credentials:"
-    api_id=$(prompt_with_default "  API_ID (from my.telegram.org)" "2040")
-    api_hash=$(prompt_with_default "  API_HASH" "b18441a1ff607e10a989891a5462e627")
-    bot_token=$(prompt_required "BOT_TOKEN" "  BOT_TOKEN (from @BotFather)")
-    admin_id=$(prompt_required "ADMIN_ID" "  ADMIN_ID (numeric Telegram user ID)")
+    info "Telegram API credentials — create your own app at https://my.telegram.org/apps"
+    info "(every customer bot shares them, so do not reuse someone else's)."
+    api_id="$(prompt_required "API_ID" "  API_ID")"
+    api_hash="$(prompt_required "API_HASH" "  API_HASH")"
+    [[ "$api_id" =~ ^[0-9]+$ ]] || die "API_ID must be a number."
+
+    echo
+    info "Bot Builder — the bot your customers use to create their own bots."
+    info "Create a NEW bot in @BotFather for it and paste its token here."
+    builder_token="$(prompt_required "BUILDER_BOT_TOKEN" "  Builder BOT_TOKEN")"
+    [[ "$builder_token" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] || die "That does not look like a bot token."
+    admin_id="$(prompt_required "BUILDER_ADMIN_ID" "  Your numeric Telegram ID(s), comma separated (see @userinfobot)")"
+    [[ "$admin_id" =~ ^[0-9]+(,[0-9]+)*$ ]] || die "Admin IDs must be numeric, separated by commas."
 
     db_pass="$(rand_b64 24)"
     db_root_pass="$(rand_b64 32)"
-
-    if [[ "$install_mode" == "native" ]]; then
-        db_host="127.0.0.1:${MARIADB_PORT}"
-        redis_url="redis://127.0.0.1:${REDIS_PORT}/0"
-    else
-        db_host="mariadb:3306"
-        redis_url="redis://redis:6379/0"
-    fi
 
     cp "$tmp" "$ENV_FILE"
     rm -f "$tmp"
@@ -1234,16 +1218,9 @@ generate_env_file() {
 
     set_env_var "$ENV_FILE" "API_ID" "$api_id"
     set_env_var "$ENV_FILE" "API_HASH" "$api_hash"
-    set_env_var "$ENV_FILE" "BOT_TOKEN" "$bot_token"
-    set_env_var "$ENV_FILE" "ADMIN_ID" "$admin_id"
-    set_env_var "$ENV_FILE" "SQLALCHEMY_DATABASE_URL" "mysql+asyncmy://mdjebot:${db_pass}@${db_host}/mdjebot"
-    set_env_var "$ENV_FILE" "FASTAPI_PORT" "$FASTAPI_PORT_DEFAULT"
-    set_env_var "$ENV_FILE" "REDIS_URL" "$redis_url"
-    set_env_var "$ENV_FILE" "REDIS_NAMESPACE_PREFIX" "mdjebot:mainbot"
-    set_env_var "$ENV_FILE" "TELETHON_SESSION_PATH" "sessions/MdjeSession"
-    set_env_var "$ENV_FILE" "LOG_DIR" "./logs"
-    set_env_var "$ENV_FILE" "LOG_TO_FILE" "true"
-    set_env_var "$ENV_FILE" "LOG_LEVEL" "INFO"
+    set_env_var "$ENV_FILE" "BUILDER_BOT_TOKEN" "$builder_token"
+    set_env_var "$ENV_FILE" "BUILDER_ADMIN_ID" "$admin_id"
+    set_env_var "$ENV_FILE" "BUILDER_SECRET_KEY" "$(generate_fernet_key)"
     set_env_var "$ENV_FILE" "MDJEBOT_IMAGE_TAG" "$(bot_image_tag_for_branch "$branch")"
     append_mariadb_vars "$db_pass" "$db_root_pass"
     append_deploy_paths
@@ -1254,11 +1231,7 @@ generate_env_file() {
 
     ok ".env created at ${ENV_FILE}"
     echo
-    info "Database credentials (saved in .env):"
-    echo -e "  ${C_DIM}Database:${C_RESET} mdjebot"
-    echo -e "  ${C_DIM}User:${C_RESET}     mdjebot"
-    echo -e "  ${C_DIM}Password:${C_RESET} ${db_pass}"
-    echo -e "  ${C_DIM}Root:${C_RESET}     ${db_root_pass}"
+    warn "Back up ${ENV_FILE}: BUILDER_SECRET_KEY encrypts your customers' bot tokens."
 }
 
 # ── Compose download & validation ──────────────────────────────────────────────
@@ -1332,18 +1305,31 @@ wait_for_containers_healthy() {
 
     info "Waiting for containers..."
     while (( i < max )); do
-        bot_state="$(get_container_state mdjebot)"
+        bot_state="$(get_container_state mdjebot-builder)"
         if [[ "$bot_state" == "running" ]]; then
-            ok "Bot container is running."
-            return 0
+            # A wrong token or API credentials make the builder exit seconds after it started.
+            sleep 8
+            if [[ "$(get_container_state mdjebot-builder)" == "running" ]]; then
+                ok "Bot Builder is running."
+                return 0
+            fi
+            warn "The builder stopped right after starting. Last log lines:"
+            docker logs --tail 30 mdjebot-builder 2>&1 || true
+            return 1
         fi
         sleep 2
         i=$((i + 2))
     done
 
-    warn "Timed out waiting for bot container. Current status:"
+    warn "Timed out waiting for the builder container. Current status:"
     docker_compose ps || true
     return 1
+}
+
+count_customer_bots() {
+    local n
+    n="$(docker ps -q --filter "label=mdjebot.managed=true" 2>/dev/null | wc -l | tr -d ' ' || true)"
+    printf '%s running' "${n:-0}"
 }
 
 cleanup_stale_named_containers() {
@@ -2402,11 +2388,10 @@ action_install_docker() {
     echo -e "  ${C_DIM}Data:${C_RESET}    ${CONFIG_DIR}/data"
     echo
     info "Image:"
-    echo -e "  ${C_DIM}Bot:${C_RESET}  ${BOT_IMAGE}:$(get_bot_image_tag) ($(get_installed_bot_version))"
+    echo -e "  ${C_DIM}Image:${C_RESET}   ${BOT_IMAGE}:$(get_bot_image_tag) ($(get_installed_bot_version))"
     echo -e "  ${C_DIM}Branch:${C_RESET}  ${branch}"
     echo
     info "Ports:"
-    echo -e "  ${C_DIM}FastAPI:${C_RESET}      ${FASTAPI_PORT_DEFAULT} (public)"
     echo -e "  ${C_DIM}phpMyAdmin:${C_RESET}   ${PHPMYADMIN_PORT} (public)"
     echo -e "  ${C_DIM}Redis:${C_RESET}        ${REDIS_PORT} (localhost only)"
     echo -e "  ${C_DIM}MariaDB:${C_RESET}      ${MARIADB_PORT} (localhost only)"
@@ -2414,7 +2399,12 @@ action_install_docker() {
     echo
     info "Commands:"
     echo -e "  ${C_DIM}Manage:${C_RESET}   mdjebot"
-    echo -e "  ${C_DIM}Status:${C_RESET}   mdjebot → option 7"
+    echo -e "  ${C_DIM}Status:${C_RESET}   mdjebot → option 8"
+    echo
+    info "Next steps:"
+    echo "  1) Open your builder bot in Telegram, send /start, then /admin."
+    echo "  2) Add a bank card (🏦) and set your monthly plans (📦)."
+    echo "  3) Users buy a plan, create a bot in @BotFather, send you its token — their bot is built for them."
     show_live_logs_after
     pause
 }
@@ -2659,10 +2649,8 @@ action_update_docker() {
 
     new_ver="$(get_installed_bot_version)"
     ok "Update complete (${old_ver} → ${new_ver}) [branch=${branch}, image=$(get_bot_image_tag)]."
-    if builder_enabled; then
-        info "Customer bots keep running the previous image until you update them:"
-        info "open the builder bot → Admin panel → Server → Update all bots."
-    fi
+    info "Customer bots keep running the previous image until you update them:"
+    info "open the builder bot → /admin → Server → Update all bots."
 }
 
 action_update_native() {
@@ -2863,23 +2851,23 @@ action_logs() {
         return 0
     fi
 
-    echo "  1) Bot logs"
+    echo "  1) Builder logs"
     echo "  2) MariaDB logs"
     echo "  3) Redis logs"
     echo "  4) All services"
-    echo "  5) Live bot logs (Ctrl+C to exit)"
+    echo "  5) Live builder logs (Ctrl+C to exit)"
     echo "  0) Back"
     echo
     read -r -p "Choice: " choice || true
 
     case "$choice" in
-        1) docker_compose logs --tail=200 bot ;;
+        1) docker_compose logs --tail=200 builder ;;
         2) docker_compose logs --tail=200 mariadb ;;
         3) docker_compose logs --tail=200 redis ;;
         4) docker_compose logs --tail=100 ;;
         5)
             info "Live logs — press Ctrl+C to exit"
-            docker_compose logs -f bot
+            docker_compose logs -f builder
             ;;
         0) return 0 ;;
         *) warn "Invalid choice." ;;
@@ -2952,7 +2940,7 @@ action_restart_quiet() {
         ok "Full restart completed (native)."
         return 0
     fi
-    docker_compose pull bot || true
+    docker_compose pull builder || true
     docker_compose down
     docker_compose up -d
     ok "Full restart completed."
@@ -2993,7 +2981,7 @@ action_status() {
     echo
     info "Resource usage:"
     docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" \
-        mdjebot mdjebot-mariadb mdjebot-redis mdjebot-phpmyadmin 2>/dev/null \
+        mdjebot-builder mdjebot-mariadb mdjebot-redis mdjebot-phpmyadmin 2>/dev/null \
         || true
     show_service_urls
     pause
@@ -3036,25 +3024,15 @@ action_urls() {
     pause
 }
 
-# ── Bot Builder (multi-bot platform, Docker only) ─────────────────────────────
-generate_fernet_key() {
-    openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n'
-}
-
-builder_prepare_files() {
-    mkdir -p "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder"
-    chmod 700 "${CONFIG_DIR}/tenants" "${CONFIG_DIR}/builder" 2>/dev/null || true
-}
-
+# ── Builder settings ──────────────────────────────────────────────────────────
 builder_configure() {
-    local token admin_id main_token current_admin
-    main_token="$(get_env_value BOT_TOKEN)"
+    local token admin_id current_admin
     current_admin="$(get_env_value BUILDER_ADMIN_ID)"
     echo
-    info "The Bot Builder runs as its own bot — create a NEW bot in @BotFather for it."
+    info "Enter the builder's own bot token (a bot created in @BotFather) and its admins."
     token="$(prompt_required "BUILDER_BOT_TOKEN" "  Builder BOT_TOKEN")"
-    [[ "$token" != "$main_token" ]] || die "Use a different bot token than the main bot."
-    admin_id="$(prompt_with_default "  Builder admin ID(s), comma separated" "${current_admin:-$(get_env_value ADMIN_ID)}")"
+    [[ "$token" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] || die "That does not look like a bot token."
+    admin_id="$(prompt_with_default "  Builder admin ID(s), comma separated" "${current_admin:-}")"
     [[ "$admin_id" =~ ^[0-9]+(,[0-9]+)*$ ]] || die "Admin IDs must be numeric, separated by commas."
 
     set_env_var "$ENV_FILE" "BUILDER_BOT_TOKEN" "$token"
@@ -3066,51 +3044,19 @@ builder_configure() {
     ok "Builder settings saved to ${ENV_FILE}"
 }
 
-builder_start() {
-    # An older downloaded compose file may not know the builder service yet.
-    if ! grep -q 'container_name: mdjebot-builder' "$COMPOSE_FILE" 2>/dev/null; then
-        info "Refreshing docker-compose.yml to include the Bot Builder service..."
-        setup_compose "$(get_repo_branch)"
-    fi
-    builder_prepare_files
-    pull_images
-    info "Starting the Bot Builder..."
-    docker_compose up -d builder || die "Could not start the builder. Check: docker logs mdjebot-builder"
-    sleep 5
-    if [[ "$(get_container_state mdjebot-builder)" == "running" ]]; then
-        ok "Bot Builder is running. Open your builder bot in Telegram and send /start (admins also get /admin)."
-    else
-        warn "The builder container is not running yet. Check: docker logs mdjebot-builder"
-    fi
-}
-
 action_builder() {
     local choice
     draw_banner
-    is_installed || die "Install the bot first (option 1)."
+    is_installed || die "Install the Bot Builder first (option 1)."
     is_docker_mode || die "The Bot Builder needs the Docker install mode."
     command -v docker &>/dev/null || die "Docker is not installed."
 
-    if ! builder_enabled; then
-        echo -e "${C_BOLD}  Bot Builder${C_RESET}"
-        echo "  A Telegram bot where users create and manage their own MdjeBot"
-        echo "  (just a bot token + admin ID), with plans, wallet and card-to-card payments."
-        echo
-        warn "The builder controls Docker on this server (it mounts /var/run/docker.sock)."
-        read -r -p "Enable the Bot Builder now? (y/N): " choice || true
-        [[ "${choice,,}" == "y" ]] || return 0
-        builder_configure
-        builder_start
-        pause
-        return 0
-    fi
-
-    echo -e "${C_BOLD}  Bot Builder${C_RESET} — ${C_GREEN}enabled${C_RESET} ($(get_container_state mdjebot-builder))"
+    echo -e "${C_BOLD}  Builder settings${C_RESET} — builder is $(get_container_state mdjebot-builder)"
     echo
     echo "  1) Restart builder"
     echo "  2) View builder logs"
     echo "  3) Change builder token / admin IDs"
-    echo "  4) Disable builder (customer bots keep running)"
+    echo "  4) List customer bot containers"
     echo "  0) Back"
     echo
     read -r -p "Choice: " choice || true
@@ -3124,17 +3070,12 @@ action_builder() {
             ;;
         3)
             builder_configure
-            builder_start
+            docker_compose up -d --force-recreate builder
+            ok "Builder restarted with the new settings."
             ;;
         4)
-            read -r -p "Stop and remove the builder service? Customer bots are not touched. (y/N): " choice || true
-            if [[ "${choice,,}" == "y" ]]; then
-                docker_compose stop builder || true
-                docker_compose rm -f builder || true
-                # Clearing the token switches the compose profile off.
-                set_env_var "$ENV_FILE" "BUILDER_BOT_TOKEN" ""
-                ok "Builder disabled. Re-enable it from this menu any time (data is kept)."
-            fi
+            docker ps -a --filter "label=mdjebot.managed=true" \
+                --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
             ;;
         *) return 0 ;;
     esac
@@ -3158,8 +3099,7 @@ main_menu() {
             9) action_urls ;;
             10) action_update_script ;;
             11) action_docker_network ;;
-            12) action_ssl ;;
-            13) action_builder ;;
+            12|13) action_builder ;;
             0|q|Q) draw_banner; ok "Goodbye!"; exit 0 ;;
             *) warn "Invalid option."; sleep 1 ;;
         esac

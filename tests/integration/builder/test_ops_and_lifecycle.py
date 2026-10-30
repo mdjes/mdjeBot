@@ -10,21 +10,18 @@ from builder.services.provisioner import CmdResult
 from tests.support.builder_env import make_plan
 
 
-async def _tenant(env, *, status=TenantStatus.PENDING, expires_in_days=None, bot_id=1) -> int:
+async def _tenant(
+    env, *, status=TenantStatus.PENDING, expires_in_days=None, bot_id=1, token=True, pending_days=0
+) -> int:
     async with env.db.session() as s:
         plan = make_plan()
         s.add(plan)
         await s.flush()
-        tenant = await billing.create_tenant(
-            s,
-            env.box,
-            owner_id=5,
-            bot_id=bot_id,
-            bot_username="shop_bot",
-            token="1:" + "T" * 35,
-            admin_ids=[5, 6],
-            plan_id=plan.id,
-        )
+        tenant = await billing.create_tenant(s, owner_id=5, plan_id=plan.id, pending_days=pending_days)
+        if token:
+            billing.attach_token(
+                tenant, env.box, token="1:" + "T" * 35, bot_id=bot_id, bot_username="shop_bot", admin_ids=[5, 6]
+            )
         tenant.status = status
         if expires_in_days is not None:
             tenant.expires_at = utcnow() + timedelta(days=expires_in_days)
@@ -155,3 +152,41 @@ async def test_renewal_before_expiry_rearms_reminder(env):
         await s.commit()
     counts = await run_expiry_pass(env.db, env.ops, env.notifier)
     assert counts["reminded"] == 1
+
+
+async def test_deploy_refuses_a_slot_without_token(env):
+    tid = await _tenant(env, status=TenantStatus.AWAITING_TOKEN, token=False, pending_days=30)
+    result = await env.ops.deploy(tid)
+    assert not result.ok and "token" in result.error
+    assert (await _get(env, tid)).status == TenantStatus.AWAITING_TOKEN
+    assert "run" not in env.runner.verbs()
+
+
+async def test_deploy_starts_the_subscription_clock_with_the_paid_days(env):
+    tid = await _tenant(env, status=TenantStatus.AWAITING_TOKEN, pending_days=30)
+    assert (await _get(env, tid)).expires_at is None
+
+    assert (await env.ops.deploy(tid)).ok
+
+    tenant = await _get(env, tid)
+    assert tenant.status == TenantStatus.RUNNING and tenant.pending_days == 0
+    assert 29 <= (tenant.expires_at - utcnow()).days <= 30
+
+
+async def test_failed_first_deploy_keeps_the_paid_days_for_the_retry(env):
+    tid = await _tenant(env, status=TenantStatus.AWAITING_TOKEN, pending_days=30)
+    env.runner.responses["run"] = CmdResult(125, "", "boom")
+    assert not (await env.ops.deploy(tid)).ok
+    failed = await _get(env, tid)
+    assert (failed.status, failed.pending_days, failed.expires_at) == (TenantStatus.ERROR, 30, None)
+
+    env.runner.responses.pop("run")
+    assert (await env.ops.deploy(tid)).ok
+    assert (await _get(env, tid)).pending_days == 0
+
+
+async def test_expiry_pass_ignores_slots_waiting_for_a_token(env):
+    tid = await _tenant(env, status=TenantStatus.AWAITING_TOKEN, token=False, pending_days=30)
+    counts = await run_expiry_pass(env.db, env.ops, env.notifier, now=utcnow() + timedelta(days=400))
+    assert counts == {"reminded": 0, "expired": 0, "deleted": 0}
+    assert (await _get(env, tid)).status == TenantStatus.AWAITING_TOKEN

@@ -109,31 +109,35 @@ async def release_discount(session: AsyncSession, code: str) -> None:
 # ── tenants ───────────────────────────────────────────────────────────────────
 async def create_tenant(
     session: AsyncSession,
-    box: SecretBox,
     *,
     owner_id: int,
-    bot_id: int,
-    bot_username: str,
-    token: str,
-    admin_ids: list[int],
     plan_id: int | None = None,
     is_trial: bool = False,
-    expires_at: datetime | None = None,
+    pending_days: int = 0,
+    status: str = TenantStatus.PENDING,
 ) -> Tenant:
+    """A tenant "slot": created when the user starts buying; the bot token arrives later."""
     tenant = Tenant(
         owner_id=owner_id,
         plan_id=plan_id,
-        bot_id=bot_id,
-        bot_username=bot_username,
-        token_enc=box.encrypt(token),
-        admin_ids=",".join(str(i) for i in admin_ids),
-        status=TenantStatus.PENDING,
+        admin_ids=str(owner_id),
+        status=status,
         is_trial=is_trial,
-        expires_at=expires_at,
+        pending_days=pending_days,
     )
     session.add(tenant)
     await session.flush()
     return tenant
+
+
+def attach_token(
+    tenant: Tenant, box: SecretBox, *, token: str, bot_id: int, bot_username: str, admin_ids: list[int]
+) -> None:
+    """Store the customer's bot token (encrypted) and admins on a paid slot."""
+    tenant.token_enc = box.encrypt(token)
+    tenant.bot_id = bot_id
+    tenant.bot_username = bot_username
+    tenant.admin_ids = ",".join(str(i) for i in admin_ids)
 
 
 async def find_live_tenant_by_bot(session: AsyncSession, bot_id: int) -> Tenant | None:
@@ -216,6 +220,7 @@ class Fulfillment:
     tenant_id: int | None = None
     needs_deploy: bool = False
     credited: int = 0
+    awaiting_token: bool = False  # paid, but the owner has not sent the bot token yet
 
 
 async def fulfill_payment(session: AsyncSession, payment: Payment) -> Fulfillment:
@@ -230,6 +235,14 @@ async def fulfill_payment(session: AsyncSession, payment: Payment) -> Fulfillmen
         # Paid for something that no longer exists: give the money back instead of losing it.
         await adjust_balance(session, payment.user_id, payment.amount)
         return Fulfillment(credited=payment.amount)
+
+    if tenant.token_enc is None:
+        # No bot yet: bank the days; the clock starts once the bot is running (TenantOps.deploy).
+        tenant.pending_days += plan.duration_days
+        tenant.plan_id = plan.id
+        tenant.is_trial = False
+        tenant.status = TenantStatus.AWAITING_TOKEN
+        return Fulfillment(tenant_id=tenant.id, awaiting_token=True)
 
     extend_tenant(tenant, plan.duration_days, plan_id=plan.id)
     needs_deploy = tenant.status in (TenantStatus.PENDING, TenantStatus.EXPIRED, TenantStatus.ERROR)
@@ -296,6 +309,26 @@ async def purchase_with_wallet(
         status=PaymentStatus.APPROVED,
     )
     payment.decided_at = utcnow()
+    return payment, await fulfill_payment(session, payment)
+
+
+async def grant_free(
+    session: AsyncSession, *, user_id: int, kind: str, plan: Plan, tenant: Tenant, admin_id: int
+) -> tuple[Payment, Fulfillment]:
+    """Builder admins can create/renew a bot without paying (recorded as a zero-amount admin payment)."""
+    payment = await create_payment(
+        session,
+        user_id=user_id,
+        kind=kind,
+        amount=0,
+        method="admin",
+        plan_id=plan.id,
+        tenant_id=tenant.id,
+        status=PaymentStatus.APPROVED,
+        note=f"free by admin {admin_id}",
+    )
+    payment.decided_at = utcnow()
+    payment.decided_by = admin_id
     return payment, await fulfill_payment(session, payment)
 
 

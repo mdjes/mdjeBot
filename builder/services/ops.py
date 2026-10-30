@@ -45,6 +45,8 @@ class TenantOps:
                 tenant = await self._load(session, tenant_id)
                 if tenant is None:
                     return OpResult(False, "tenant not found")
+                if tenant.token_enc is None:
+                    return OpResult(False, "the owner has not sent the bot token yet")
                 cfg = await load_cfg(session)
                 if tenant.host_port is None:
                     tenant.host_port = await billing.allocate_port(
@@ -62,8 +64,21 @@ class TenantOps:
             except Exception as exc:
                 await self._set_status(tenant_id, TenantStatus.ERROR, error=str(exc)[:1500])
                 return OpResult(False, str(exc))
-            await self._set_status(tenant_id, TenantStatus.RUNNING)
+            await self._mark_running(tenant_id)
             return OpResult(True)
+
+    async def _mark_running(self, tenant_id: int) -> None:
+        """Running now: apply the days that were paid for while the bot did not exist yet."""
+        async with self.db.session() as session:
+            tenant = await session.get(Tenant, tenant_id)
+            if tenant is None or tenant.status == TenantStatus.DELETED:
+                return
+            tenant.status = TenantStatus.RUNNING
+            tenant.last_error = None
+            if tenant.pending_days > 0:
+                billing.extend_tenant(tenant, tenant.pending_days)
+                tenant.pending_days = 0
+            await session.commit()
 
     async def _set_status(self, tenant_id: int, status: str, *, error: str | None = None) -> None:
         async with self.db.session() as session:

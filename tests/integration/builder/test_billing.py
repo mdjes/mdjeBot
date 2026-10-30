@@ -18,18 +18,14 @@ async def _user_and_plan(session, balance=0, price=100_000):
     return user, plan
 
 
-async def _tenant(env, session, plan, **kw):
-    return await billing.create_tenant(
-        session,
-        env.box,
-        owner_id=5,
-        bot_id=kw.pop("bot_id", 777),
-        bot_username="shop_bot",
-        token="1:" + "T" * 35,
-        admin_ids=[5],
-        plan_id=plan.id,
-        **kw,
-    )
+async def _tenant(env, session, plan, *, token=True, bot_id=777, **kw):
+    """A tenant slot; with ``token`` it already has its bot (as after the owner sent the BotFather token)."""
+    tenant = await billing.create_tenant(session, owner_id=5, plan_id=plan.id, **kw)
+    if token:
+        billing.attach_token(
+            tenant, env.box, token="1:" + "T" * 35, bot_id=bot_id, bot_username="shop_bot", admin_ids=[5]
+        )
+    return tenant
 
 
 async def test_adjust_balance_never_goes_negative(env):
@@ -251,3 +247,43 @@ async def test_collect_stats(env):
     assert stats["users"] == 1 and stats["wallet_total"] == 40
     assert stats["revenue_total"] == 100 and stats["pending_payments"] == 1
     assert stats["tenants_pending"] == 1
+
+
+async def test_paying_for_a_slot_without_bot_banks_days_until_the_token_arrives(env):
+    async with env.db.session() as s:
+        user, plan = await _user_and_plan(s, balance=150_000)
+        slot = await _tenant(env, s, plan, token=False)
+        _, result = await billing.purchase_with_wallet(
+            s, user_id=user.id, kind=PaymentKind.ORDER, plan=plan, tenant=slot
+        )
+        await s.commit()
+
+        assert result.awaiting_token and not result.needs_deploy and result.tenant_id == slot.id
+        assert (slot.status, slot.pending_days, slot.expires_at) == (TenantStatus.AWAITING_TOKEN, 30, None)
+
+        # a second payment for the same slot (e.g. an admin top-up of days) stacks
+        _, again = await billing.grant_free(
+            s, user_id=user.id, kind=PaymentKind.RENEW, plan=plan, tenant=slot, admin_id=100
+        )
+        assert again.awaiting_token and slot.pending_days == 60
+
+
+async def test_grant_free_records_a_zero_amount_admin_payment(env):
+    async with env.db.session() as s:
+        user, plan = await _user_and_plan(s)
+        slot = await _tenant(env, s, plan, token=False)
+        payment, result = await billing.grant_free(
+            s, user_id=user.id, kind=PaymentKind.ORDER, plan=plan, tenant=slot, admin_id=100
+        )
+        assert (payment.amount, payment.method, payment.status) == (0, "admin", PaymentStatus.APPROVED)
+        assert payment.decided_by == 100 and result.awaiting_token
+
+
+def test_attach_token_encrypts_and_sets_identity(env):
+    from tests.support.builder_env import make_box, make_settings
+
+    tenant = Tenant(owner_id=5, admin_ids="5")
+    box = make_box(make_settings("."))
+    billing.attach_token(tenant, box, token="1:" + "T" * 35, bot_id=42, bot_username="shop_bot", admin_ids=[5, 6])
+    assert tenant.token_enc != "1:" + "T" * 35 and box.decrypt(tenant.token_enc) == "1:" + "T" * 35
+    assert (tenant.bot_id, tenant.bot_username, tenant.admin_ids) == (42, "shop_bot", "5,6")

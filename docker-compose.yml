@@ -61,36 +61,12 @@ services:
     networks:
       - mdjebot
 
-  bot:
-    image: ghcr.io/mdjes/mdjebot:${MDJEBOT_IMAGE_TAG:-latest}
-    pull_policy: always
-    container_name: mdjebot
-    restart: unless-stopped
-    env_file:
-      - ${MDJEBOT_CONFIG_DIR:-.}/.env
-    volumes:
-      - ${MDJEBOT_CONFIG_DIR:-.}/.env:/app/.env:ro
-      - ${MDJEBOT_CONFIG_DIR:-.}/logs:/app/logs
-      - ${MDJEBOT_CONFIG_DIR:-.}/sessions:/app/sessions
-      - ${MDJEBOT_CONFIG_DIR:-.}/data/pwa_icons:/app/data/pwa_icons
-      - /var/lib/mdjebot:/var/lib/mdjebot:ro
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    ports:
-      - "${FASTAPI_PORT:-6160}:${FASTAPI_PORT:-6160}"
-    networks:
-      - mdjebot
-
-  # Bot Builder: a Telegram bot that creates/hosts customer MdjeBot instances as sibling containers.
-  # Only started when BUILDER_BOT_TOKEN is set (the manager script enables the "builder" profile).
+  # Bot Builder: the Telegram bot where customers buy a plan and send their bot token; it then creates
+  # and hosts their own MdjeBot as a sibling container (own database, Redis namespace and host port).
   builder:
     image: ghcr.io/mdjes/mdjebot:${MDJEBOT_IMAGE_TAG:-latest}
     pull_policy: always
     container_name: mdjebot-builder
-    profiles: ["builder"]
     restart: unless-stopped
     entrypoint: []
     command: ["uv", "run", "builder_main.py"]
