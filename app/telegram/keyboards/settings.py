@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from telethon.tl import types
 
 from app.logger import get_logger
-from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold
+from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold, rt_glass as _rt_glass
 from app.telegram.user.start.helpers import is_start_reaction_enabled
 
-from .common import build_telegram_button_style, styled_callback_button
+from .common import admin_callback_button, build_telegram_button_style
 from .home import stored_miniapp_mode
 
 logger = get_logger(__name__)
@@ -150,7 +150,7 @@ SETTINGS_MENU_SECTIONS = (
 
 
 def _settings_header(title: str):
-    return styled_callback_button(
+    return admin_callback_button(
         f"━━ {title} ━━",
         b"no_action",
         build_telegram_button_style("primary", None),
@@ -204,7 +204,7 @@ def get_settings_menu_text(section_key: str | None = None) -> str:
 
 
 def _settings_section_button(section: SettingsMenuSection):
-    return styled_callback_button(
+    return admin_callback_button(
         section.title,
         f"settings_menu:{section.key}",
         build_telegram_button_style("primary", None),
@@ -212,7 +212,7 @@ def _settings_section_button(section: SettingsMenuSection):
 
 
 def _settings_home_button():
-    return styled_callback_button("🏠 فهرست بخش‌ها", b"settings_menu:home", build_telegram_button_style("primary", None))
+    return admin_callback_button("🏠 فهرست بخش‌ها", b"settings_menu:home", build_telegram_button_style("primary", None))
 
 
 def _settings_nav_buttons(section_key: str) -> list:
@@ -224,7 +224,7 @@ def _settings_nav_buttons(section_key: str) -> list:
     row = []
     if current_index > 0:
         row.append(
-            styled_callback_button(
+            admin_callback_button(
                 "⬅️ بخش قبلی",
                 f"settings_menu:{sections[current_index - 1].key}",
                 build_telegram_button_style("primary", None),
@@ -235,7 +235,7 @@ def _settings_nav_buttons(section_key: str) -> list:
 
     if current_index < len(sections) - 1:
         row.append(
-            styled_callback_button(
+            admin_callback_button(
                 "بخش بعدی ➡️",
                 f"settings_menu:{sections[current_index + 1].key}",
                 build_telegram_button_style("primary", None),
@@ -250,7 +250,7 @@ async def _settings_toggle_button(settings, item: SettingsMenuItem):
         value = await is_start_reaction_enabled()
     else:
         value = bool(getattr(settings, item.attr, item.default))
-    return styled_callback_button(
+    return admin_callback_button(
         item.label,
         f"settings.{item.attr}",
         _settings_state_style(value),
@@ -283,7 +283,7 @@ async def _append_settings_section(rows: list[list], settings, section: Settings
 def _settings_api_key_login_button(settings):
     raw_mode = getattr(settings, "api_key_login_mode", "none")
     mode = get_api_key_login_mode_text(raw_mode)
-    return styled_callback_button(
+    return admin_callback_button(
         f"🔑 ورود با کلید API: {mode}",
         b"settings.api_key_login_mode",
         _settings_state_style(raw_mode != "none"),
@@ -295,7 +295,7 @@ def _miniapp_mode_label(settings) -> str:
 
 
 def _settings_miniapp_mode_button(settings):
-    return styled_callback_button(
+    return admin_callback_button(
         _miniapp_mode_label(settings),
         b"settings.miniapp_mode",
         _settings_state_style(stored_miniapp_mode(settings) != "off"),
@@ -305,7 +305,7 @@ def _settings_miniapp_mode_button(settings):
 def _settings_rich_miniapp_mode_button(settings) -> types.PageButton:
     enabled = stored_miniapp_mode(settings) != "off"
     return types.PageButton(
-        text=_rt(_miniapp_mode_label(settings)),
+        text=_rt_glass(_miniapp_mode_label(settings)),
         type=types.InlineButtonTypeCallback(data=b"settings.miniapp_mode"),
         style=types.RichButtonStyle(bg_success=True) if enabled else types.RichButtonStyle(bg_danger=True),
     )
@@ -343,7 +343,7 @@ async def _settings_rich_toggle_button(settings, item: SettingsMenuItem) -> type
     else:
         value = bool(getattr(settings, item.attr, item.default))
     return types.PageButton(
-        text=_rt(item.label),
+        text=_rt_glass(item.label),
         type=types.InlineButtonTypeCallback(data=f"settings.{item.attr}".encode()),
         style=types.RichButtonStyle(bg_success=True) if value else types.RichButtonStyle(bg_danger=True),
     )
@@ -378,7 +378,7 @@ def _settings_rich_api_key_login_button(settings) -> types.PageButton:
     raw_mode = getattr(settings, "api_key_login_mode", "none")
     mode = get_api_key_login_mode_text(raw_mode)
     return types.PageButton(
-        text=_rt(f"🔑 ورود با کلید API: {mode}"),
+        text=_rt_glass(f"🔑 ورود با کلید API: {mode}"),
         type=types.InlineButtonTypeCallback(data=b"settings.api_key_login_mode"),
         style=types.RichButtonStyle(bg_success=True) if raw_mode != "none" else types.RichButtonStyle(bg_danger=True),
     )
@@ -386,7 +386,7 @@ def _settings_rich_api_key_login_button(settings) -> types.PageButton:
 
 def _settings_rich_home_button() -> types.PageButton:
     return types.PageButton(
-        text=_rt("🏠 فهرست بخش‌ها"),
+        text=_rt_glass("🏠 فهرست بخش‌ها"),
         type=types.InlineButtonTypeCallback(data=b"settings_menu:home"),
         style=types.RichButtonStyle(bg_primary=True),
     )
@@ -402,7 +402,7 @@ def _settings_rich_nav_button_rows(section_key: str) -> list[types.PageBlockButt
     if current_index > 0:
         row.append(
             types.PageButton(
-                text=_rt("⬅️ بخش قبلی"),
+                text=_rt_glass("⬅️ بخش قبلی"),
                 type=types.InlineButtonTypeCallback(data=f"settings_menu:{sections[current_index - 1].key}".encode()),
                 style=types.RichButtonStyle(bg_primary=True),
             )
@@ -413,7 +413,7 @@ def _settings_rich_nav_button_rows(section_key: str) -> list[types.PageBlockButt
     if current_index < len(sections) - 1:
         row.append(
             types.PageButton(
-                text=_rt("بخش بعدی ➡️"),
+                text=_rt_glass("بخش بعدی ➡️"),
                 type=types.InlineButtonTypeCallback(data=f"settings_menu:{sections[current_index + 1].key}".encode()),
                 style=types.RichButtonStyle(bg_primary=True),
             )
@@ -461,7 +461,7 @@ async def settings_menu_rich_blocks(settings, section_key: str | None = None) ->
                 types.PageBlockButtonRow(
                     buttons=[
                         types.PageButton(
-                            text=_rt(menu_section.title),
+                            text=_rt_glass(menu_section.title),
                             type=types.InlineButtonTypeCallback(data=f"settings_menu:{menu_section.key}".encode()),
                             style=types.RichButtonStyle(bg_primary=True),
                         )

@@ -17,7 +17,7 @@ from telethon.tl.types import (
 )
 
 from app.db.crud.keyboards import KeyboardButtonCRUD
-from app.utils.text.glass import glass_text
+from app.utils.text.glass import glass_text, unglass_text
 
 
 def create_button(text):
@@ -160,6 +160,21 @@ def styled_url_button(text: str, url: str, style_obj=None):
 def styled_simple_webview_button(text: str, url: str, style_obj=None):
     # Normal (non-inline) keyboard button, unlike styled_webview_button which is inline-only.
     return KeyboardButton(text=text, type=ButtonTypeSimpleWebView(url=url), style=style_obj)
+
+
+# Buttons of screens only admins see: always the glass look (once, whatever the text already carries).
+
+
+def admin_callback_button(text: str, data, style_obj=None):
+    return styled_callback_button(glass_text(unglass_text(text)), data, style_obj)
+
+
+def admin_copy_button(text: str, copy_text: str, style_obj=None):
+    return styled_copy_button(glass_text(unglass_text(text)), copy_text, style_obj)
+
+
+def admin_webview_button(text: str, url: str, style_obj=None):
+    return styled_webview_button(glass_text(unglass_text(text)), url, style_obj)
 
 
 def styled_reply_button(text: str, style_obj=None):

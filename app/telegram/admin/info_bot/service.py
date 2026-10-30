@@ -25,7 +25,7 @@ from app.logger import get_logger
 from app.logger.tags import LogTag
 from app.services.billing import payment_stats
 from app.services.payments.ir_gateways.providers import GATEWAYS
-from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold
+from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold, rt_glass as _rt_glass
 from app.telegram.admin.info_bot.states import (
     HIDDEN_LINK,
     REVENUE_PERIODS,
@@ -165,12 +165,12 @@ def _updated_footer(updated_at: datetime) -> types.PageBlockFooter:
 def _action_button_row(refresh_data: bytes) -> types.PageBlockButtonRow:
     """Native Bot API 10.3 refresh + back row, replacing the plain inline keyboard."""
     refresh_button = types.PageButton(
-        text=_rt("🔄 بروزرسانی"),
+        text=_rt_glass("🔄 بروزرسانی"),
         type=types.InlineButtonTypeCallback(data=refresh_data),
         style=types.RichButtonStyle(bg_success=True),
     )
     back_button = types.PageButton(
-        text=_rt("🔙 بازگشت"),
+        text=_rt_glass("🔙 بازگشت"),
         type=types.InlineButtonTypeCallback(data=b"stats:main"),
     )
     return types.PageBlockButtonRow(buttons=[refresh_button, back_button])
@@ -419,14 +419,14 @@ def main_nav_button_rows() -> list[types.PageBlockButtonRow]:
     """Native Bot API 10.3 'Button Revolution' navigation + refresh, replacing the plain inline keyboard."""
     nav_buttons = [
         types.PageButton(
-            text=_rt(label),
+            text=_rt_glass(label),
             type=types.InlineButtonTypeCallback(data=f"stats:{action}".encode()),
             style=types.RichButtonStyle(bg_primary=True),
         )
         for label, action in _MAIN_NAV_BUTTONS
     ]
     refresh_button = types.PageButton(
-        text=_rt("🔄 بروزرسانی"),
+        text=_rt_glass("🔄 بروزرسانی"),
         type=types.InlineButtonTypeCallback(data=b"stats:refresh"),
         style=types.RichButtonStyle(bg_success=True),
     )
@@ -778,7 +778,7 @@ def _period_button_rows(section: str, active: str) -> list[types.PageBlockButton
     for keys in _PERIOD_BUTTON_ROWS:
         buttons = [
             types.PageButton(
-                text=_rt(f"• {REVENUE_PERIODS[key]}" if key == active else REVENUE_PERIODS[key]),
+                text=_rt_glass(f"• {REVENUE_PERIODS[key]}" if key == active else REVENUE_PERIODS[key]),
                 type=types.InlineButtonTypeCallback(data=f"stats:{section}:{key}".encode()),
                 style=types.RichButtonStyle(bg_primary=True) if key == active else None,
             )
@@ -1088,7 +1088,7 @@ def system_rate_button_rows(payload: dict) -> list[types.PageBlockButtonRow]:
     """Bot API 10.3 'Button Revolution': currency name + live price as disabled (display-only) native buttons."""
     buttons = [
         types.PageButton(
-            text=_rt(f"{symbol} · {int(payload.get(payload_key, 0) or 0):,}"),
+            text=_rt_glass(f"{symbol} · {int(payload.get(payload_key, 0) or 0):,}"),
             type=types.InlineButtonTypeDisabled(),
             style=types.RichButtonStyle(bg_primary=True),
         )

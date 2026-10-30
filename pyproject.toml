@@ -1,6 +1,6 @@
 [project]
 name = "MdjeBot"
-version = "3.4.0"
+version = "3.4.1"
 description = "MdjeBot - Telegram VPN sales bot for the Pasarguard panel, by Mdje"
 authors = [{ name = "Mdje" }]
 requires-python = ">=3.14,<3.15"

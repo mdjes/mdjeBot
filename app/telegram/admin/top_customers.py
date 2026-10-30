@@ -9,7 +9,7 @@ from app import CustomMarkdown
 from app.db.crud.services import ServiceCRUD
 from app.db.crud.transactions import TransactionCRUD
 from app.services.billing import payment_stats
-from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold
+from app.services.telegram.rich_message import rt as _rt, rt_bold as _rt_bold, rt_glass as _rt_glass
 from app.utils.text.markdown import bold, code
 
 MODULE_NAME = "admin.top_customers"
@@ -222,13 +222,13 @@ def top_view_button_rows(active: str) -> list[types.PageBlockButtonRow]:
     """Native Bot API 10.3 'Button Revolution' tab selector + back, replacing the plain inline keyboard."""
     tab_buttons = [
         types.PageButton(
-            text=_rt(f"• {label}" if key == active else label),
+            text=_rt_glass(f"• {label}" if key == active else label),
             type=types.InlineButtonTypeCallback(data=f"stats:top:{key}".encode()),
             style=types.RichButtonStyle(bg_primary=True) if key == active else None,
         )
         for key, label in _TOP_VIEWS
     ]
-    back_button = types.PageButton(text=_rt("🔙 بازگشت"), type=types.InlineButtonTypeCallback(data=b"stats:main"))
+    back_button = types.PageButton(text=_rt_glass("🔙 بازگشت"), type=types.InlineButtonTypeCallback(data=b"stats:main"))
     return [
         types.PageBlockButtonRow(buttons=tab_buttons),
         types.PageBlockDivider(),

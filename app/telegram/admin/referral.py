@@ -22,7 +22,7 @@ from app.services.billing.referral_rewards import (
     referral_side_mode,
 )
 from app.telegram.keyboards.balance import balance_back_home_button
-from app.telegram.keyboards.common import styled_copy_button
+from app.telegram.keyboards.common import admin_copy_button
 from app.telegram.plugins import PluginContext
 from app.telegram.state import get_step, set_step
 from app.telegram.user.referral_earnings import earnings_enabled
@@ -341,7 +341,7 @@ async def handle_referral_callbacks(event, data):
         referral_message = referral_message.replace("{referral_reward_amount}", f"{settings.referral_reward_amount:,}")
         referral_message = referral_message.replace("{referral_bonus_amount}", f"{settings.referral_bonus_amount:,}")
 
-        copy_button = styled_copy_button("📋 کپی لینک دعوت", referral_link)
+        copy_button = admin_copy_button("📋 کپی لینک دعوت", referral_link)
 
         stats_button = Button.inline("📊 آمار دعوت‌های من", data="my_referral_stats")
         back_home_button = await balance_back_home_button()

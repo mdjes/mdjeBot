@@ -10,6 +10,7 @@ from telethon import errors
 from telethon.tl import functions, types
 
 from app import Mdje
+from app.utils.text.glass import glass_text, unglass_text
 
 RICH_MESSAGE_DOCS_URL = "https://core.telegram.org/bots/api#rich-message-formatting-options"
 
@@ -29,6 +30,11 @@ _MD_MARK_RE = re.compile(r"[*`]")
 def rt(text) -> types.TypeRichText:
     """Plain RichText leaf for native blocks; strips stray markdown marker characters."""
     return types.TextPlain(text=_MD_MARK_RE.sub("", str(text)))
+
+
+def rt_glass(text) -> types.TypeRichText:
+    """A button label in the glass look (bracketed once), as RichText."""
+    return rt(glass_text(unglass_text(str(text))))
 
 
 def rt_bold(text) -> types.TypeRichText:

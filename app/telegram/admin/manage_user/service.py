@@ -17,7 +17,7 @@ from app.logger import LogType, get_logger
 from app.services.panels.auth import fetch_panel_groups_with_auth
 from app.services.panels.groups import resolve_panel_group_ids
 from app.telegram.admin.manage_user import states
-from app.telegram.keyboards.common import styled_copy_button, styled_webview_button
+from app.telegram.keyboards.common import admin_copy_button, admin_webview_button
 from app.telegram.shared.utils.logging import send_log_message
 from app.telegram.state import clear_user, get_data, set_step
 from app.utils.formatting.conversions import day_to_timestamp, gigabytes_to_bytes
@@ -119,13 +119,13 @@ async def finalize_admin_config(event, username: str):
             [
                 KeyboardInlineButtonRow(
                     [
-                        styled_webview_button(
+                        admin_webview_button(
                             "برای مشاهده اطلاعات بیشتر کلیک کنید",
                             f"{subscription_url}",
                         )
                     ]
                 ),
-                KeyboardInlineButtonRow([styled_copy_button("برای کپی لینک کلیک کنید", f"{subscription_url}")]),
+                KeyboardInlineButtonRow([admin_copy_button("برای کپی لینک کلیک کنید", f"{subscription_url}")]),
             ]
         ),
     )

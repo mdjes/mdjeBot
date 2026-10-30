@@ -236,3 +236,32 @@ def test_animated_emoji_in_the_middle_and_after_a_bmp_character() -> None:
 
 def test_only_an_emoji_leaves_an_empty_name() -> None:
     assert split_button_label(_custom_emoji_message("🔥", (0, 2, 5))) == ("", 5)
+
+
+def test_admin_only_screens_draw_glass_buttons_once() -> None:
+    from app.services.telegram.rich_message import rt_glass
+    from app.telegram.keyboards.common import admin_callback_button, admin_copy_button, admin_webview_button
+
+    plain = admin_callback_button("📊 آمار", b"x")
+    again = admin_callback_button(glass_text("📊 آمار"), b"x")
+    assert plain.text == again.text == glass_text("📊 آمار")
+    assert plain.type.data == b"x"
+    assert admin_copy_button("کپی", "link").text == glass_text("کپی")
+    assert admin_webview_button("باز", "https://example.com").text == glass_text("باز")
+    assert rt_glass("🔄 بروزرسانی").text == glass_text("🔄 بروزرسانی")
+    assert rt_glass(glass_text("🔄 بروزرسانی")).text == glass_text("🔄 بروزرسانی")
+
+
+def test_settings_menu_navigation_buttons_are_glass() -> None:
+    from app.telegram.keyboards import settings as settings_keyboards
+
+    sections = settings_keyboards.SETTINGS_MENU_SECTIONS
+    buttons = [
+        settings_keyboards._settings_home_button(),
+        *(settings_keyboards._settings_section_button(section) for section in sections),
+        *settings_keyboards._settings_nav_buttons(sections[1].key),
+    ]
+    assert len(buttons) >= 3
+    assert all(b.text.startswith(GLASS_LEFT) and b.text.endswith(GLASS_RIGHT) for b in buttons)
+    rich = settings_keyboards._settings_rich_home_button()
+    assert rich.text.text == glass_text("🏠 فهرست بخش‌ها")
