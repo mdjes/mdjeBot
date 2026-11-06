@@ -26,6 +26,7 @@ from app.telegram.shared.guards.channel_gate import (
     is_reserved_start_param,
 )
 from app.telegram.shared.start_params import find_app_key_by_start_param, is_welcome_start_param
+from app.telegram.shared.utils.notices import notify_new_member
 from app.telegram.state.keys import get_redis_namespace
 from app.utils.formatting.dates import Time_Date
 from app.utils.text.bot_texts import get_bot_text
@@ -169,17 +170,29 @@ async def handle_discount_start_param(user_id: int, param: str | None, *, notify
     return True
 
 
+async def announce_new_member(event: Message) -> None:
+    """Tell the admins a customer has just joined."""
+    try:
+        sender = await event.get_sender()
+    except Exception:
+        sender = None
+    await notify_new_member(event.sender_id, sender)
+
+
 async def prompt_channel_join(event: Message, lang: str) -> None:
     not_joined_channels = await get_not_joined_channels(event.sender_id)
     if not not_joined_channels:
         return
 
+    is_new = await UserCRUD().read_user(event.sender_id) is None
     await add_user(
         user_id=event.sender_id,
         step="start",
         time_s=Time_Date()["stamp"],
         language=lang,
     )
+    if is_new:
+        await announce_new_member(event)
     await event.reply(
         CHANNEL_JOIN_MESSAGE.format(date=Time_Date()["mf"]),
         buttons=build_channel_join_buttons(not_joined_channels),

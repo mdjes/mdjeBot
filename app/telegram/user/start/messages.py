@@ -77,6 +77,7 @@ async def start_command_handler(event: Message):
                 time_s=Time_Date()["stamp"],
                 language=lang,
             )
+            await helpers.announce_new_member(event)
             existing_user = await UserCRUD().read_user(event.sender_id)
 
             success, _message = await UserCRUD().update_ref(event.sender_id, referrer_id)
@@ -149,6 +150,7 @@ async def start_command_handler(event: Message):
             time_s=Time_Date()["stamp"],
             language=lang,
         )
+        await helpers.announce_new_member(event)
 
     await clear_user(event.sender_id)
     await set_step(event.sender_id, "start")

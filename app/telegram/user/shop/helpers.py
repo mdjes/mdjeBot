@@ -19,7 +19,7 @@ from app.db.crud.plans import PlanManager
 from app.db.crud.services import ServiceCRUD
 from app.db.crud.settings import SettingsManager
 from app.db.crud.user import UserCRUD, debit_Money_if_sufficient, update_Money
-from app.logger import LogType, get_logger
+from app.logger import get_logger
 from app.services.billing.direct_pay_flow import (
     build_insufficient_balance_message,
     create_balance_button,
@@ -55,8 +55,8 @@ from app.telegram.keyboards.home import bhome_buttons, home_back_button
 from app.telegram.shared.keyboards.duration_buttons import build_duration_selection_button_rows
 from app.telegram.shared.keyboards.panel_buttons import build_panel_display_button
 from app.telegram.shared.keyboards.plan_buttons import build_plan_inline_button
-from app.telegram.shared.utils.logging import send_log_message
 from app.telegram.shared.utils.media import respond_with_photo_and_text, send_photo_and_text_to_user
+from app.telegram.shared.utils.notices import notify_wallet_purchase
 from app.telegram.shared.utils.username import (
     handle_buy_username_conflict,
     is_panel_username_conflict,
@@ -551,23 +551,6 @@ async def create_vpn_purchase_for_user(
         .replace("{new_balance}", f"{new_amount:,}")
         .replace("{creation_time}", f"{creation_time_text} {creation_time_unit}")
     )
-    discount_line = f"🎫 کد تخفیف: `{discount_code}`\n" if discount_code else ""
-    log_title = "خرید جدید باکدتخفیف" if discount_code else " خرید جدید بدون کدتخفیف"
-    log_text = (
-        f"📢 **{log_title}**\n\n"
-        f"👤 شناسه کاربر: `{user_id}`\n"
-        f"📅 تاریخ خرید (میلادی): `{Time_Date()['mf']}`\n"
-        f"📅 تاریخ خرید (شمسی): `{Time_Date()['jf']}`\n"
-        f"🎫 کد سرویس: `{code_service}`\n"
-        f"**🔷 اسم کانفیگ:** `{username}`\n"
-        f"{discount_line}"
-        f"📏 حجم خریداری شده: {volume_text}\n"
-        f"**🔌 محدودیت کاربر :** {ip_limit_text}\n"
-        f"💸 مبلغ پرداخت شده: `{int(amount):,}` تومان\n"
-        f"💵 موجودی جدید کاربر: `{new_amount:,}` تومان\n."
-        f"🔗 لینک کانفیگ:\n{subscription_links_text}"
-    )
-
     try:
         user = await UserCRUD().read_user(user_id)
         if user and user.ref:
@@ -592,7 +575,16 @@ async def create_vpn_purchase_for_user(
         is_test=False,
     )
     await clear_user(user_id)
-    await send_log_message(LogType.OTHER, message=log_text)
+    await notify_wallet_purchase(
+        user_id,
+        balance=int(new_amount),
+        plan_label=f"{panel.name} | {int(plan.duration)} روزه | {volume_text}",
+        service_name=username,
+        volume=volume_text,
+        days=int(plan.duration),
+        price=int(amount),
+        discount_code=discount_code,
+    )
     await send_purchase_report(
         user_id=user_id,
         panel_name=panel.name,

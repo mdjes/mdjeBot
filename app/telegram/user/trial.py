@@ -12,7 +12,6 @@ from telethon import Button, events
 from telethon.tl.custom import Message
 from telethon.tl.types import KeyboardInlineButtonRow, ReplyInlineMarkup
 
-from app import Mdje
 from app.db.crud.keyboards import get_button_text
 from app.db.crud.services import ServiceCRUD
 from app.db.crud.settings import SettingsManager
@@ -35,6 +34,7 @@ from app.telegram.shared.guards.channel_gate import ensure_channel_membership, e
 from app.telegram.shared.utils.logging import send_log_message
 from app.telegram.shared.utils.maintenance import bot_is_offline
 from app.telegram.shared.utils.media import respond_with_photo_and_text
+from app.telegram.shared.utils.notices import notify_trial_taken
 from app.telegram.state import get_step, set_step
 from app.utils.formatting.conversions import convert_storage, day_to_timestamp, gigabytes_to_bytes
 from app.utils.formatting.dates import Time_Date
@@ -349,34 +349,6 @@ async def deliver_trial(event, user_id: int, lang: str, panel, *, mark_tested: b
             .replace("{config_links_with_txt}", single_config_links_section)
         )
 
-        try:
-            telegram_user = await Mdje.get_entity(user_id)
-            user_first_name = telegram_user.first_name or "نامشخص"
-            user_last_name = telegram_user.last_name or ""
-            user_full_name = f"{user_first_name} {user_last_name}".strip()
-            user_username = telegram_user.username or "ندارد"
-        except Exception:
-            user_full_name = "نامشخص"
-            user_username = "ندارد"
-
-        log_text = (
-            f"📢 ** دریافت تست رایگان **\n\n"
-            f"**👤 اطلاعات کاربر:**\n"
-            f"**📝 نام:** {user_full_name}\n"
-            f"**#⃣ آیدی کاربر:** `{user_id}` | [پروفایل کاربر](tg://user?id={user_id})\n"
-            f"**📱 یوزرنیم:** @{user_username}\n\n"
-            f"**📦 اطلاعات تست:**\n"
-            f"**📥 حجم تست:** {volume_text}\n"
-            f"**⏰ زمان تست:** {test_duration_days} روز\n\n"
-            f"**📅 تاریخ (میلادی):** `{Time_Date()['mf']}`\n"
-            f"**📅 تاریخ (شمسی):** `{Time_Date()['jf']}`\n"
-            f"**🎫 کد سرویس:** `{code_service}`\n"
-            f"**🔷 اسم کانفیگ:** `{username}`\n"
-            f"**🎫 کد پنل:** `{panel.code}`\n"
-            f"**🌐 نام پنل:** `{panel.name}`\n"
-            f"**🔗 لینک کانفیگ:**\n{subscription_links_text}"
-        )
-
         trial_buttons = ReplyInlineMarkup(
             [
                 KeyboardInlineButtonRow(
@@ -415,7 +387,7 @@ async def deliver_trial(event, user_id: int, lang: str, panel, *, mark_tested: b
             is_test=True,
         )
 
-        await send_log_message(LogType.OTHER, message=log_text)
+        await notify_trial_taken(user_id)
     except Exception as exc:
         logger.error("%s", exc)
         await event.respond("ساخت سرویس تست انجام نشد. بعداً دوباره تلاش کن.")

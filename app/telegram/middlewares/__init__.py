@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from app import Mdje
 from app.logger import LogTag, get_logger
+from app.telegram.keyboards.admin_back import install_back_row
 from app.telegram.keyboards.admin_menu import install_inline_glass
 from app.telegram.middlewares.admin import AdminContextMiddleware
 from app.telegram.middlewares.antiflood import AntifloodMiddleware
@@ -38,6 +40,7 @@ def register_global_middlewares() -> None:
     Importing this module registers Telethon bridge handlers.
     """
     install_inline_glass()
+    install_back_row(Mdje)
     newmessage_chain = [
         ErrorBoundaryMiddleware(),
         LoggingMiddleware(),

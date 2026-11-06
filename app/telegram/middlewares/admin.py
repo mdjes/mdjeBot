@@ -30,7 +30,7 @@ class AdminContextMiddleware(BaseMiddleware):
         ctx.extras["is_admin"] = ctx.is_admin
         if not ctx.is_admin:
             return
-        enter_admin_view()
+        enter_admin_view(ctx.user_id)
         await ensure_admin_menus()
         message = getattr(ctx.event, "message", None) if ctx.is_newmessage else None
         if message is None or ctx.user_id is None or menu_press(message.message) is None:

@@ -27,6 +27,7 @@ from app.utils.admin_buttons import ADMIN_ITEMS, MENU_LAYOUTS, AdminItem
 from app.utils.text.glass import GLASS_STYLE, glass_text, unglass_text
 from config import WEBAPP_URL
 
+from .admin_back import set_admin_chat
 from .common import build_telegram_button_style, styled_callback_button, styled_url_button, styled_webview_button
 
 WEB_PANEL_URL = f"{WEBAPP_URL.rstrip('/')}?panel=1" if WEBAPP_URL.startswith("https://") else ""
@@ -173,9 +174,10 @@ def restore_message(message) -> bool:
 _admin_view: ContextVar[bool] = ContextVar("admin_view", default=False)
 
 
-def enter_admin_view() -> None:
+def enter_admin_view(user_id: int | None = None) -> None:
     """Mark the update being handled as an admin's: its inline buttons are drawn glassy."""
     _admin_view.set(True)
+    set_admin_chat(user_id)
 
 
 def _glassy(factory):

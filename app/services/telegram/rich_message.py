@@ -171,6 +171,13 @@ async def send_rich_message(
         raise RichMessageError(_rich_message_user_error()) from exc
 
 
+def _with_admin_back(chat_id, buttons):
+    """An admin's own rich screen gets the way back to the panel like any other admin message."""
+    from app.telegram.keyboards.admin_back import applies_to, with_back_row
+
+    return with_back_row(buttons) if applies_to(chat_id) else buttons
+
+
 async def edit_native_rich_message(
     event,
     blocks: list,
@@ -183,6 +190,7 @@ async def edit_native_rich_message(
 ) -> None:
     """Edit an existing message into a native rich message built from explicit blocks (tables, button rows, …)."""
     msg = await event.get_message()
+    buttons = _with_admin_back(event.chat_id, buttons)
     reply_markup = Mdje.build_reply_markup(buttons) if buttons else None
     await Mdje(
         functions.messages.EditMessageRequest(
@@ -213,6 +221,7 @@ async def send_native_rich_message(
     inside InputRichMessage blocks — send_rich_message's InputRichMessageMarkdown has no block
     slot for them, so a first-time send with in-body buttons needs this instead of that.
     """
+    buttons = _with_admin_back(chat_id, buttons)
     reply_markup = Mdje.build_reply_markup(buttons) if buttons else None
     await Mdje(
         functions.messages.SendMessageRequest(
