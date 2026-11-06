@@ -9,6 +9,7 @@ from sqlalchemy import select
 from builder.db import Database
 from builder.models import MasterPanel, PanelSub, PanelSubStatus, Tenant, TenantStatus, utcnow
 from builder.notify import Notifier
+from builder.services import auto_renew
 from builder.services.cfg import load_cfg
 from builder.services.panels.backend import PanelError
 from builder.services.panels.ops import PanelOps
@@ -31,6 +32,7 @@ async def run_panel_sync(
         cfg = await load_cfg(session)
         warn_percent = min(100, max(1, cfg.int("panel_warn_percent")))
         expiry_days = max(0, cfg.int("panel_expiry_warn_days"))
+        auto_on = cfg.bool("auto_renew_enabled") and cfg.bool("wallet_enabled")
         subs = (
             (
                 await session.execute(
@@ -74,12 +76,26 @@ async def run_panel_sync(
         expired = bool(sub.expires_at and sub.expires_at <= now)
         exhausted = bool(info.is_limited or (limit > 0 and used >= limit))
 
+        auto_note = ""
+        if (
+            auto_on
+            and sub.auto_renew
+            and sub.expires_at is not None
+            and sub.expires_at - now <= timedelta(days=max(1, expiry_days))
+        ):
+            outcome = await auto_renew.renew_panel(db, ops, notifier, sub.id)
+            if outcome in (auto_renew.RENEWED, auto_renew.FAILED):
+                if outcome == auto_renew.RENEWED:
+                    counts["auto_renewed"] = counts.get("auto_renewed", 0) + 1
+                continue
+            auto_note = auto_renew.NO_FUNDS_NOTE if outcome == auto_renew.NO_FUNDS else ""
+
         if expired and sub.status in (PanelSubStatus.ACTIVE, PanelSubStatus.LIMITED):
             if (await ops.suspend(sub.id, status=PanelSubStatus.EXPIRED)).ok:
                 counts["expired"] += 1
                 await notifier.send(
                     sub.owner_id,
-                    f"⛔️ مدت پنل {label} در {fmt_date(sub.expires_at)} تمام شد و پنل غیرفعال شد.\nبرای ادامه تمدید کنید.",
+                    f"⛔️ مدت پنل {label} در {fmt_date(sub.expires_at)} تمام شد و پنل غیرفعال شد.\nبرای ادامه تمدید کنید.{auto_note}",
                     renew,
                 )
             continue
@@ -118,7 +134,7 @@ async def run_panel_sync(
                 counts["warned"] += 1
                 await notifier.send(
                     sub.owner_id,
-                    f"🔔 پنل {label} تا {fmt_date(sub.expires_at)} معتبر است. برای ادامه تمدید کنید.",
+                    f"🔔 پنل {label} تا {fmt_date(sub.expires_at)} معتبر است. برای ادامه تمدید کنید.{auto_note}",
                     renew,
                 )
 

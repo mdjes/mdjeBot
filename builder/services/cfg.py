@@ -28,6 +28,9 @@ DEFAULTS: dict[str, str] = {
     "panel_sales_enabled": "1",
     "panel_warn_percent": "80",
     "panel_expiry_warn_days": "3",
+    "auto_renew_enabled": "1",
+    "daily_report_enabled": "0",
+    "daily_report_hour": "22",
 }
 
 # (key, label, kind) — kind: bool | int | text. Drives the admin settings screen.
@@ -50,6 +53,9 @@ EDITABLE: tuple[tuple[str, str, str], ...] = (
     ("panel_sales_enabled", "🧩 فروش پنل", "bool"),
     ("panel_warn_percent", "📉 هشدار مصرف پنل (٪)", "int"),
     ("panel_expiry_warn_days", "🔔 هشدار انقضای پنل (روز قبل)", "int"),
+    ("auto_renew_enabled", "🔁 تمدید خودکار از کیف پول", "bool"),
+    ("daily_report_enabled", "📊 گزارش روزانه به مدیران", "bool"),
+    ("daily_report_hour", "🕒 ساعت گزارش روزانه (۰ تا ۲۳)", "int"),
 )
 EDITABLE_KEYS = {key: (label, kind) for key, label, kind in EDITABLE}
 

@@ -621,9 +621,30 @@ class UserFlows:
             [Btn("🔄 تمدید", f"u:renew:{tenant.id}"), Btn("👤 تغییر ادمین", f"u:chadm:{tenant.id}")],
             [Btn("🗑 حذف ربات", f"u:del:{tenant.id}")],
         ]
+        if cfg.bool("auto_renew_enabled") and cfg.bool("wallet_enabled") and tenant.plan_id and not tenant.is_trial:
+            mode = "✅ روشن" if tenant.auto_renew else "⛔️ خاموش"
+            rows.insert(1, [Btn(f"🔁 تمدید خودکار: {mode}", f"u:autob:{tenant.id}")])
         if tenant.bot_username:
             rows.insert(0, [Btn("🔗 باز کردن ربات", url=self._bot_link(tenant))])
         await self.show(ctx, "\n".join(lines), [*rows, [Btn("🔙 بازگشت", "u:bots")]])
+
+    @route("u:autob")
+    async def auto_renew_toggle(self, ctx, tenant_id: str = "") -> None:
+        tenant = await self._owned(ctx, tenant_id)
+        if tenant is None:
+            await ctx.answer("این ربات پیدا نشد.", alert=True)
+            return
+        async with self.db.session() as s:
+            row = await s.get(Tenant, tenant.id)
+            row.auto_renew = not row.auto_renew
+            enabled = row.auto_renew
+            await s.commit()
+        await ctx.answer(
+            "🔁 تمدید خودکار روشن شد؛ هنگام نزدیک شدن به پایان، از کیف پول کسر می‌شود."
+            if enabled
+            else "تمدید خودکار خاموش شد."
+        )
+        await self.bot_detail(ctx, str(tenant.id))
 
     @route("u:renew")
     async def renew(self, ctx, tenant_id: str = "") -> None:

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from builder.db import Database
 from builder.models import Tenant, TenantStatus, utcnow
 from builder.notify import Notifier
+from builder.services import auto_renew
 from builder.services.cfg import load_cfg
 from builder.services.ops import TenantOps
 from builder.ui import Btn
@@ -26,6 +27,7 @@ async def run_expiry_pass(
         cfg = await load_cfg(session)
         reminder_days = max(0, cfg.int("reminder_days"))
         grace_days = max(0, cfg.int("grace_days"))
+        auto_on = cfg.bool("auto_renew_enabled") and cfg.bool("wallet_enabled")
         tenants = (
             (
                 await session.execute(
@@ -44,6 +46,14 @@ async def run_expiry_pass(
         renew_button = [[Btn("🔄 تمدید", f"u:renew:{tenant.id}")]]
         label = f"@{tenant.bot_username}" if tenant.bot_username else f"#{tenant.id}"
 
+        auto_note = ""
+        if auto_on and tenant.auto_renew and expires_at - now <= timedelta(days=max(1, reminder_days)):
+            outcome = await auto_renew.renew_tenant(db, ops, notifier, tenant.id)
+            if outcome == auto_renew.RENEWED:
+                counts["auto_renewed"] = counts.get("auto_renewed", 0) + 1
+                continue
+            auto_note = auto_renew.NO_FUNDS_NOTE if outcome == auto_renew.NO_FUNDS else ""
+
         if tenant.status == TenantStatus.RUNNING and expires_at <= now:
             result = await ops.stop(tenant.id, status=TenantStatus.EXPIRED)
             if result.ok:
@@ -51,7 +61,7 @@ async def run_expiry_pass(
                 await notifier.send(
                     tenant.owner_id,
                     f"⛔️ اشتراک ربات {label} در {fmt_date(expires_at)} منقضی شد و ربات متوقف شد.\n"
-                    f"تا {grace_days} روز فرصت دارید تمدید کنید، پس از آن ربات و اطلاعاتش حذف می‌شود.",
+                    f"تا {grace_days} روز فرصت دارید تمدید کنید، پس از آن ربات و اطلاعاتش حذف می‌شود.{auto_note}",
                     renew_button,
                 )
         elif (
@@ -62,7 +72,7 @@ async def run_expiry_pass(
             if tenant.reminded_for != expires_at:
                 sent = await notifier.send(
                     tenant.owner_id,
-                    f"🔔 اشتراک ربات {label} تا {fmt_date(expires_at)} معتبر است. برای جلوگیری از توقف، تمدید کنید.",
+                    f"🔔 اشتراک ربات {label} تا {fmt_date(expires_at)} معتبر است. برای جلوگیری از توقف، تمدید کنید.{auto_note}",
                     renew_button,
                 )
                 async with db.session() as session:

@@ -15,10 +15,12 @@ from builder.db import Database, ensure_mysql_database
 from builder.models import Plan
 from builder.notify import TelethonNotifier
 from builder.security import SecretBox
+from builder.services import report
 from builder.services.lifecycle import expire_stale_payments, run_expiry_pass
 from builder.services.ops import TenantOps
 from builder.services.panels.sync import run_panel_sync
 from builder.services.provisioner import Provisioner
+from builder.services.watchdog import Watchdog
 from builder.settings import Settings
 
 log = logging.getLogger("builder")
@@ -87,7 +89,25 @@ async def run_builder(settings: Settings, stop_event: asyncio.Event | None = Non
         except Exception:
             log.exception("panel sync failed")
 
+    watchdog = Watchdog(db, ops, ops.prov, notifier, settings.admin_ids)
+
+    async def _watchdog_job():
+        try:
+            counts = await watchdog.run_once()
+            if counts["restarted"] or counts["failed"]:
+                log.info("watchdog: %s", counts)
+        except Exception:
+            log.exception("watchdog failed")
+
+    async def _report_job():
+        try:
+            await report.run_if_due(db, notifier, settings.admin_ids)
+        except Exception:
+            log.exception("daily report failed")
+
     scheduler.add_job(_expiry_job, "interval", minutes=10, max_instances=1, coalesce=True)
+    scheduler.add_job(_watchdog_job, "interval", minutes=3, max_instances=1, coalesce=True)
+    scheduler.add_job(_report_job, "interval", minutes=20, max_instances=1, coalesce=True)
     scheduler.add_job(_panel_sync_job, "interval", minutes=5, max_instances=1, coalesce=True)
     scheduler.add_job(_stale_payments_job, "interval", hours=1, max_instances=1, coalesce=True)
     scheduler.start()

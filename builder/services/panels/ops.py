@@ -200,6 +200,28 @@ class PanelOps:
             await session.commit()
         return PanelResult(True, sub_id=sub_id)
 
+    async def move(self, sub_id: int, tenant_id: int) -> PanelResult:
+        """Connect the panel to another of its owner's bots: out of the old one, into the new one.
+
+        A stopped old bot cannot be told to drop the panel; it is simply not connected from now on.
+        """
+        async with self.db.session() as session:
+            loaded = await self._load(session, sub_id)
+            if loaded is None:
+                return PanelResult(False, "panel subscription not found", sub_id)
+            sub = loaded[0]
+            target = await session.get(Tenant, tenant_id)
+            if target is None or target.owner_id != sub.owner_id or target.status == TenantStatus.DELETED:
+                return PanelResult(False, "that bot is not yours", sub_id)
+            if sub.tenant_id == target.id:
+                return PanelResult(True, sub_id=sub_id)
+        await self._bot_toggle(sub_id, "unlink")
+        async with self.db.session() as session:
+            sub = await session.get(PanelSub, sub_id)
+            sub.tenant_id, sub.linked, sub.last_error = tenant_id, False, None
+            await session.commit()
+        return await self.link(sub_id)
+
     async def _bot_toggle(self, sub_id: int, action: str) -> None:
         """Enable/disable/unlink the panel inside the customer's bot; failures never block the main operation."""
         async with self.db.session() as session:

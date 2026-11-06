@@ -77,6 +77,8 @@ class PanelFlows:
             master = await s.get(MasterPanel, sub.master_id)
             plan = await s.get(PanelPlan, sub.plan_id) if sub.plan_id else None
             bot = await s.get(Tenant, sub.tenant_id) if sub.tenant_id else None
+            others = [t for t in await billing.list_owner_tenants(s, sub.owner_id) if t.id != sub.tenant_id]
+        cfg = await self.cfg()
         left = days_left(sub.expires_at, utcnow())
         lines = [
             f"🧩 <b>{esc(master.name if master else 'پنل')}</b> — <code>{esc(sub.admin_username)}</code>",
@@ -98,6 +100,12 @@ class PanelFlows:
         ]
         if not sub.linked and bot is not None and bot.status == TenantStatus.RUNNING:
             rows.append([Btn("🔗 اتصال مجدد به ربات", f"u:prelink:{i}")])
+        if others:
+            rows.append([Btn("🔀 اتصال به ربات دیگر", f"u:pmove:{i}")])
+        rows.append([Btn("🛒 خرید دوباره", f"u:prebuy:{i}")])
+        if cfg.bool("auto_renew_enabled") and cfg.bool("wallet_enabled") and sub.plan_id:
+            mode = "✅ روشن" if sub.auto_renew else "⛔️ خاموش"
+            rows.append([Btn(f"🔁 تمدید خودکار: {mode}", f"u:autop:{i}")])
         await self.show(ctx, "\n".join(lines), [*rows, *BACK_PANELS])
 
     @route("u:pcred")
@@ -157,7 +165,74 @@ class PanelFlows:
         await ctx.answer("✅ متصل شد." if result.ok else f"❌ {(result.error or '')[:150]}", alert=not result.ok)
         await self.panel_detail(ctx, str(sub.id))
 
+    @route("u:pmove")
+    async def panel_move_pick(self, ctx, sub_id: str = "") -> None:
+        sub = await self._own_sub(ctx, sub_id)
+        if sub is None:
+            await ctx.answer("این پنل پیدا نشد.", alert=True)
+            return
+        async with self.db.session() as s:
+            bots = [t for t in await billing.list_owner_tenants(s, ctx.user_id) if t.id != sub.tenant_id]
+        if not bots:
+            await ctx.answer("ربات دیگری ندارید.", alert=True)
+            return
+        rows = [[Btn(f"🤖 {self.tenant_label(bot)}", f"u:pmoveto:{sub.id}:{bot.id}")] for bot in bots]
+        rows.append([Btn("🔙 بازگشت", f"u:psub:{sub.id}")])
+        await self.show(
+            ctx,
+            f"🔀 پنل <code>{esc(sub.admin_username)}</code> به کدام ربات وصل شود؟\n\nاز ربات فعلی جدا می‌شود.",
+            rows,
+        )
+
+    @route("u:pmoveto")
+    async def panel_move(self, ctx, sub_id: str = "", tenant_id: str = "") -> None:
+        sub = await self._own_sub(ctx, sub_id)
+        if sub is None or not tenant_id.isdigit():
+            await ctx.answer("این پنل پیدا نشد.", alert=True)
+            return
+        result = await self.panels.move(sub.id, int(tenant_id))
+        if result.ok:
+            await ctx.answer("✅ متصل شد.")
+        elif "not running" in (result.error or ""):
+            await ctx.answer("⏳ به‌محض روشن شدن آن ربات، خودکار وصل می‌شود.", alert=True)
+        else:
+            await ctx.answer(f"❌ {(result.error or '')[:150]}", alert=True)
+        await self.panel_detail(ctx, str(sub.id))
+
+    @route("u:autop")
+    async def panel_auto_renew(self, ctx, sub_id: str = "") -> None:
+        sub = await self._own_sub(ctx, sub_id)
+        if sub is None:
+            await ctx.answer("این پنل پیدا نشد.", alert=True)
+            return
+        async with self.db.session() as s:
+            row = await s.get(PanelSub, sub.id)
+            row.auto_renew = not row.auto_renew
+            enabled = row.auto_renew
+            await s.commit()
+        await ctx.answer("🔁 تمدید خودکار روشن شد." if enabled else "تمدید خودکار خاموش شد.")
+        await self.panel_detail(ctx, str(sub.id))
+
     # ── buying ────────────────────────────────────────────────────────────────
+    @route("u:prebuy")
+    async def panel_rebuy(self, ctx, sub_id: str = "") -> None:
+        """Buy another panel like this one, for the same bot, straight to the summary."""
+        sub = await self._own_sub(ctx, sub_id)
+        if sub is None:
+            await ctx.answer("این پنل پیدا نشد.", alert=True)
+            return
+        if not (await self.cfg()).bool("panel_sales_enabled"):
+            await ctx.answer("فروش پنل فعال نیست.", alert=True)
+            return
+        async with self.db.session() as s:
+            plan = await s.get(PanelPlan, sub.plan_id) if sub.plan_id else None
+            bot = await s.get(Tenant, sub.tenant_id) if sub.tenant_id else None
+        if plan is None or not plan.active or plan.kind != "plan" or bot is None or bot.status == TenantStatus.DELETED:
+            await self.panel_buy(ctx)  # that exact plan or bot is gone: let them choose
+            return
+        state = self.set_state(ctx.user_id, "pcheckout", mode="new", plan_id=plan.id, tenant_id=bot.id)
+        await self._show_panel_checkout(ctx, state)
+
     @route("u:pbuy")
     async def panel_buy(self, ctx) -> None:
         cfg = await self.cfg()
@@ -506,4 +581,5 @@ class PanelFlows:
             text = f"✅ پنل <code>{esc(sub.admin_username)}</code> تمدید شد.\n📊 حجم تازه: {fmt_bytes(sub.data_limit)}\n📅 اعتبار تا: {fmt_date(sub.expires_at)}"
         else:
             text = f"✅ حجم اضافه شد. حجم کل پنل <code>{esc(sub.admin_username)}</code>: {fmt_bytes(sub.data_limit)}"
-        await self.notifier.send(owner_id, text, [[Btn("🧩 پنل‌های من", "u:panels")], *BACK_HOME])
+        again = [[Btn("🛒 خرید دوباره", f"u:prebuy:{sub_id}")]] if action == "provision" else []
+        await self.notifier.send(owner_id, text, [[Btn("🧩 پنل‌های من", "u:panels")], *again, *BACK_HOME])

@@ -85,6 +85,7 @@ class Tenant(Base):
     admin_ids: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default=TenantStatus.PENDING, index=True)
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=False)  # renew from the wallet before it ends
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reminded_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     host_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -238,6 +239,7 @@ class PanelSub(Base):
     used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)  # last metered usage
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     linked: Mapped[bool] = mapped_column(Boolean, default=False)  # connected to the customer's bot
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=False)  # renew from the wallet before it ends
     warned_usage: Mapped[bool] = mapped_column(Boolean, default=False)
     warned_expiry: Mapped[bool] = mapped_column(Boolean, default=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
