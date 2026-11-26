@@ -14,7 +14,6 @@ from app.telegram.admin.trial import handlers as trial_ui, service as trial
 from app.telegram.keyboards.admin_menu import MENUS
 from app.utils.admin_buttons import ADMIN_ITEMS, GROUP_INTROS, GROUP_MENUS, MENU_LAYOUTS
 
-
 # --- the trial: what an admin may type ---------------------------------------------------------------------
 
 
@@ -130,9 +129,7 @@ def test_volume_and_days_go_to_the_panels_that_give_the_trial(shop) -> None:
 
 
 def test_the_screen_says_when_it_is_on_but_nothing_is_offered() -> None:
-    state = trial.TrialState(
-        on=True, visible=False, panels=[], all_panels=[], volume_gb=0.5, days=3, phone_verify=True
-    )
+    state = trial.TrialState(on=True, visible=False, panels=[], all_panels=[], volume_gb=0.5, days=3, phone_verify=True)
     text, buttons = trial_ui.render(state)
     assert "نمایش داده نمی‌شود" in text and "500 مگ" in text
     assert [b.type.data for row in buttons for b in row][:3] == [b"trial.switch", b"trial.vol", b"trial.days"]

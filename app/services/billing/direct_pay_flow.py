@@ -212,7 +212,7 @@ def describe_pending_purchase(pending: dict[str, Any] | None) -> str:
     if not volume and payload.get("gig"):  # a custom purchase keeps the number, not the wording
         try:
             volume = convert_storage(float(payload["gig"]))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             volume = ""
     lines = []
     if label:
