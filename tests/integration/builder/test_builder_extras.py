@@ -188,16 +188,17 @@ async def test_the_watchdog_alerts_once_when_starting_keeps_failing_and_ignores_
 
 # ── daily report ──────────────────────────────────────────────────────────────────────────────────
 async def test_the_daily_report_goes_out_once_a_day_with_the_numbers(env):
-    now = datetime(2026, 11, 7, 20, 0)  # 23:30 in Tehran
+    now = utcnow()  # the bot below expires a day from the real clock, so "soon" has to be measured from it too
     async with env.db.session() as s:
-        s.add(BuilderUser(id=1, created_at=now - timedelta(hours=2)))
+        s.add(BuilderUser(id=1, created_at=now))
         s.add(BuilderUser(id=2, created_at=now - timedelta(days=3)))
         await set_cfg(s, "daily_report_enabled", "1")
+        await set_cfg(s, "daily_report_hour", "0")  # due at any hour, so the test does not depend on when it runs
         await s.commit()
     await _bot_expiring(env, balance=0, auto=False)
 
     assert await report.run_if_due(env.db, env.notifier, [7], now=now)
-    assert not await report.run_if_due(env.db, env.notifier, [7], now=now + timedelta(minutes=30))
+    assert not await report.run_if_due(env.db, env.notifier, [7], now=now + timedelta(seconds=1))
 
     (text,) = env.notifier.to(7)
     assert "کاربر جدید: <b>2</b>" in text  # user 1 plus the one _bot_expiring created today

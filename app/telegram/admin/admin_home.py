@@ -10,7 +10,7 @@ from app.db.crud.keyboards import get_button_text
 from app.db.crud.log_channels import LogChannelManager
 from app.db.crud.panels import PanelsManager
 from app.logger import get_logger
-from app.telegram.keyboards.admin import DOCS_URL, Panel_Admin_Buttons
+from app.telegram.keyboards.admin import Panel_Admin_Buttons
 from app.telegram.keyboards.common import is_keyboard_config_step
 from app.telegram.plugins import PluginContext
 from app.telegram.shared.url_presets import format_admin_links_message, get_bot_username

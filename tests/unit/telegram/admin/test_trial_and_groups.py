@@ -10,8 +10,7 @@ from telethon import events
 
 from app.services.billing.direct_pay_flow import describe_pending_purchase
 from app.telegram.admin import menu_press
-from app.telegram.admin.trial import handlers as trial_ui
-from app.telegram.admin.trial import service as trial
+from app.telegram.admin.trial import handlers as trial_ui, service as trial
 from app.telegram.keyboards.admin_menu import MENUS
 from app.utils.admin_buttons import ADMIN_ITEMS, GROUP_INTROS, GROUP_MENUS, MENU_LAYOUTS
 
@@ -103,7 +102,7 @@ def shop(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_turning_the_trial_on_also_picks_a_panel_so_the_button_shows(shop) -> None:
-    settings, panels = shop
+    settings, _panels = shop
 
     note = asyncio.run(trial.switch(True))
 
@@ -111,8 +110,8 @@ def test_turning_the_trial_on_also_picks_a_panel_so_the_button_shows(shop) -> No
     assert "DE-1" in note and asyncio.run(trial.load_state()).visible
 
 
-def test_turning_it_off_hides_the_button_and_keeps_the_panel_choice(shop) -> None:
-    settings, _ = shop
+@pytest.mark.usefixtures("shop")
+def test_turning_it_off_hides_the_button_and_keeps_the_panel_choice() -> None:
     asyncio.run(trial.switch(True))
     asyncio.run(trial.switch(False))
     state = asyncio.run(trial.load_state())
@@ -136,7 +135,7 @@ def test_the_screen_says_when_it_is_on_but_nothing_is_offered() -> None:
     )
     text, buttons = trial_ui.render(state)
     assert "نمایش داده نمی‌شود" in text and "500 مگ" in text
-    assert [b.data for row in buttons for b in row][:3] == [b"trial.switch", b"trial.vol", b"trial.days"]
+    assert [b.type.data for row in buttons for b in row][:3] == [b"trial.switch", b"trial.vol", b"trial.days"]
 
 
 # --- the grouped admin menu --------------------------------------------------------------------------------

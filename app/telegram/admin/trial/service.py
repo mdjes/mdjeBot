@@ -22,13 +22,15 @@ DEFAULT_VOLUME_GB = 2.0
 DEFAULT_DAYS = 3
 
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩٫٬،", "01234567890123456789.,,")
+_DECIMAL_COMMA = re.compile(r"^(\d+),(\d{1,2})(?!\d)")  # "1,5" is one and a half; "1,000" is a thousand
 _VOLUME = re.compile(r"(\d+(?:\.\d+)?)\s*(mb|m|مگ|مگابایت|gb|g|گیگ|گیگابایت)?")
 _MEGA = {"mb", "m", "مگ", "مگابایت"}
 
 
 def parse_volume_gb(text: str | None) -> float | None:
     """A volume in GB from what an admin types: ``0.5`` and ``500mb`` both mean 500 MB, ``2`` means 2 GB."""
-    cleaned = (text or "").strip().lower().translate(_DIGITS).replace(",", "")
+    cleaned = (text or "").strip().lower().translate(_DIGITS)
+    cleaned = _DECIMAL_COMMA.sub(r"\1.\2", cleaned).replace(",", "")
     match = _VOLUME.fullmatch(cleaned)
     if match is None:
         return None
