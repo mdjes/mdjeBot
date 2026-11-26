@@ -1,0 +1,1 @@
+"""Admin free-trial screen."""

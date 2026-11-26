@@ -8,6 +8,7 @@ from telethon.tl.custom import Message
 from app import Mdje
 from app.db.crud.keyboards import get_button_text
 from app.db.crud.log_channels import LogChannelManager
+from app.db.crud.panels import PanelsManager
 from app.logger import get_logger
 from app.telegram.keyboards.admin import DOCS_URL, Panel_Admin_Buttons
 from app.telegram.keyboards.common import is_keyboard_config_step
@@ -38,31 +39,33 @@ ADD_PANEL_STEPS = frozenset(
     }
 )
 
-_SETUP_WARNING = (
-    "⚠️ **تنظیمات ربات کامل نیست**\n\n"
-    "برای عملکرد صحیح ربات، ابتدا مورد زیر را تنظیم کنید:\n\n"
-    "**📝 مدیریت لاگ‌ها**\n"
-    "هنوز کانال یا گروهی برای دریافت لاگ‌های ربات انتخاب نشده است.\n"
-    "از بخش **📝 مدیریت لاگ‌ها**، مقصد ارسال لاگ‌ها را مشخص کنید."
-)
+# What is still missing before the shop can work, as short steps that say where to click.
+_TODO_PANEL = "یک پنل اضافه کنید: 🛍 فروش و محصولات ← منوی پنل‌ها"
+_TODO_LOGS = "کانال گزارش‌ها را تنظیم کنید: ⚙️ تنظیمات و ابزارها ← مدیریت لاگ‌ها"
 
 _OFFICIAL_CHANNEL_URL = "https://t.me/sutaw"
 
 _POWERED_BY_NOTICE = f"🤖 این ربات با ربات‌ساز **MdjeBot** ساخته شده است.\n📢 {_OFFICIAL_CHANNEL_URL}"
 
 
-def _admin_home_message(user_id: int, username: str | None, *, setup_warning: str | None = None) -> str:
-    user_label = username or "—"
-    message = (
-        f"**🌺به پنل مدیریت خوش آمدید.**\n"
-        f"ایدی عددی شما: `{user_id}`\n"
-        f"نام کاربری شما: @{user_label}\n"
-        f"\n📚 مستندات ربات: {DOCS_URL}\n"
-        f"\n{_POWERED_BY_NOTICE}\n"
-    )
-    if setup_warning:
-        message += f"\n{setup_warning}\n"
-    return message
+def _admin_home_message(user_id: int, username: str | None, *, todo: list[str] | None = None) -> str:
+    who = f"@{username}" if username else f"`{user_id}`"
+    message = f"**🌺 پنل مدیریت** — {who}\n━━━━━━━━━━━━━━━\nیک بخش را انتخاب کنید 👇\n"
+    if todo:
+        steps = "\n".join(f"{number}. {step}" for number, step in enumerate(todo, 1))
+        message += f"\n⚠️ **برای شروع این کارها مانده:**\n{steps}\n"
+    return message + f"\n{_POWERED_BY_NOTICE}"
+
+
+async def _todo() -> list[str]:
+    todo = []
+    if not await PanelsManager().get_all_panels():
+        todo.append(_TODO_PANEL)
+    if LOG_CHANNEL is None:
+        channels = await LogChannelManager().get_all_log_channels()
+        if not any(ch.is_active for ch in channels):
+            todo.append(_TODO_LOGS)
+    return todo
 
 
 async def _drop_old_reply_keyboard(user_id: int) -> None:
@@ -82,15 +85,9 @@ async def send_admin_home(user_id: int, username: str | None = None) -> None:
     await set_step(user_id=user_id, step="panel")
     await _drop_old_reply_keyboard(user_id)
 
-    setup_warning = None
-    if LOG_CHANNEL is None:
-        channels = await LogChannelManager().get_all_log_channels()
-        if not any(ch.is_active for ch in channels):
-            setup_warning = _SETUP_WARNING
-
     await Mdje.send_message(
         entity=user_id,
-        message=_admin_home_message(user_id, username, setup_warning=setup_warning),
+        message=_admin_home_message(user_id, username, todo=await _todo()),
         buttons=Panel_Admin_Buttons,
     )
 

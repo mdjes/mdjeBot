@@ -79,7 +79,7 @@ def admin(monkeypatch: pytest.MonkeyPatch):
 
 def test_the_menu_button_is_part_of_the_admin_menu() -> None:
     assert ADMIN_ITEMS["ad.gifts"].label == handlers.MENU_LABEL
-    assert "ad.gifts" in {key for row in MENU_LAYOUTS["main"] for key in row}
+    assert "ad.gifts" in {key for row in MENU_LAYOUTS["grp_promo"] for key in row}
     assert "ad.gifts" in KEYBOARD_BUTTON_TITLES
 
 

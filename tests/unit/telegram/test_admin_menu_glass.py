@@ -88,12 +88,12 @@ def test_restore_message_rewrites_text_and_drops_the_parsed_cache() -> None:
 def test_rename_and_icon_rebuild_the_menu_in_place(menus) -> None:
     menus["ad.backup"] = _row("「 💾 نسخه پشتیبان」", "glass", 5368324170671202286)
     keyboards_crud.invalidate_keyboard_button_cache()
-    before = Panel_Admin_Buttons
+    before = admin_menu.MENUS["grp_tools"]
 
     asyncio.run(admin_menu.ensure_admin_menus())
 
-    assert Panel_Admin_Buttons is before
-    buttons = [getattr(b, "button", b) for row in Panel_Admin_Buttons for b in row]
+    assert admin_menu.MENUS["grp_tools"] is before
+    buttons = [getattr(b, "button", b) for row in admin_menu.MENUS["grp_tools"] for b in row]
     renamed = next(b for b in buttons if b.text == "「 💾 نسخه پشتیبان」")
     assert renamed.style.icon == 5368324170671202286
     assert glass_text("📦 بکاپ ربات") in admin_menu._history
@@ -280,7 +280,7 @@ def test_the_admin_menu_is_inline_with_a_callback_per_button() -> None:
     buttons = _inline_buttons(Panel_Admin_Buttons)
     assert all(isinstance(button, KeyboardInlineButton) for button in buttons)
     callbacks = {b.type.data.decode() for b in buttons if isinstance(b.type, InlineButtonTypeCallback)}
-    assert "adm:ad.gateway" in callbacks and "adm:ad.gifts" in callbacks and "adm:ad.home" in callbacks
+    assert {"adm:ad.gateway", "adm:ad.grp_users", "adm:ad.trial", "adm:ad.home"} <= callbacks
     # The docs button opens a link; it never sends a label.
     assert any(isinstance(b.type, InlineButtonTypeUrl) for b in buttons)
     assert all(len(data.encode()) <= 64 for data in callbacks)

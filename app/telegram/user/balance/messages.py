@@ -34,6 +34,7 @@ from app.services.billing.direct_pay_flow import (
     DIRECT_PAY_TOPUP_INTRO_DEFAULT,
     REDIS_DIRECT_PAY_ACTIVE,
     REDIS_MABLAGH,
+    describe_pending_purchase,
     fill_placeholders,
     is_direct_pay_active,
 )
@@ -526,10 +527,13 @@ async def mablagh_sharj_handler(event: Message):
                         event.sender_id, status="rejected", method="auto"
                     )
                     user_info = await _build_user_info_log(event.sender_id, reduser)
+                    purchase = describe_pending_purchase(await get_pending_for_user(event.sender_id))
+                    purchase_block = f"{purchase}\n" if purchase else ""
 
                     log_message_dup = (
                         f"{texts.DUPLICATE_RECEIPT_LOG_HEADER}"
                         f"{user_info}\n"
+                        f"{purchase_block}"
                         f"🔢 **شماره تلفن:** {reduser.number}\n"
                         f"💰 **موجودی:** `{reduser.amount:,}` تومان\n"
                         f"🛡️ **مبلغ وارد شده** `{int(mablagh):,}` تومان\n"
@@ -573,6 +577,8 @@ async def mablagh_sharj_handler(event: Message):
         auto_rejected = await crud.count_user_transactions(tx.user_id, status="rejected", method="auto")
 
         user_info = await _build_user_info_log(event.sender_id, reduser)
+        purchase = describe_pending_purchase(await get_pending_for_user(event.sender_id))
+        purchase_block = f"{purchase}\n" if purchase else ""
 
         auto_status = rule_crud.format_status_line(
             matched_rule,
@@ -582,6 +588,7 @@ async def mablagh_sharj_handler(event: Message):
         log_message = (
             f"{texts.MANUAL_RECEIPT_LOG_HEADER}"
             f"{user_info}\n"
+            f"{purchase_block}"
             f"🔢 **شماره تلفن:** {reduser.number}\n"
             f"💰 **موجودی:** `{reduser.amount:,}` تومان\n"
             f"🛡️ **مبلغ وارد شده** `{int(mablagh):,}` تومان\n"

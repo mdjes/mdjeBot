@@ -1753,7 +1753,7 @@ async def panel_admin_callback_handler(event: events.CallbackQuery.Event):
         # The panel carries its own switch now, so several panels can offer a
         # trial; the old single code is kept in step for anything still reading it.
         await PanelsManager().update_panel(code=panel_code, test_enabled=True)
-        await SettingsManager().update_setting(setting.id, test_panel_id=panel_code)
+        await SettingsManager().update_setting(setting.id, test_panel_id=panel_code, test_mode=True)
         await event.answer(f"✅ سرویس تست از پنل «{panel.name}» ارائه می‌شود.", alert=True)
         panel = await PanelsManager().get_panel_by_code(panel_code)
         text, buttons = await build_panel_test_settings_content(panel)

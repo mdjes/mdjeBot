@@ -56,6 +56,13 @@ ADMIN_ITEMS: dict[str, AdminItem] = _items(
     AdminItem("ad.links", "🔗 لینک های آماده", "منوی ادمین · لینک های آماده"),
     AdminItem("ad.docs", "📚 مستندات ربات", "منوی ادمین · مستندات", url=DOCS_URL),
     AdminItem("ad.web_panel", "🖥 پنل تحت وب", "منوی ادمین · پنل تحت وب"),
+    AdminItem("ad.trial", "🎁 تست رایگان", "منوی ادمین · تست رایگان"),
+    AdminItem("ad.grp_users", "👤 کاربران و موجودی", "منوی ادمین · گروه کاربران و موجودی"),
+    AdminItem("ad.grp_sales", "🛍 فروش و محصولات", "منوی ادمین · گروه فروش و محصولات"),
+    AdminItem("ad.grp_promo", "🎟 تخفیف و هدیه", "منوی ادمین · گروه تخفیف و هدیه"),
+    AdminItem("ad.grp_comms", "📣 ارتباط با کاربران", "منوی ادمین · گروه ارتباط با کاربران"),
+    AdminItem("ad.grp_look", "🎨 ظاهر ربات", "منوی ادمین · گروه ظاهر ربات"),
+    AdminItem("ad.grp_tools", "⚙️ تنظیمات و ابزارها", "منوی ادمین · گروه تنظیمات و ابزارها"),
     AdminItem("ad.home", "🏠", "منوی ادمین · بازگشت به خانه"),
     AdminItem("ad.back_panel", "🔙 بازگشت به پنل", "منوی ادمین · بازگشت به پنل"),
     AdminItem("ad.discount_list", "🎛 لیست کدتخفیف", "زیرمنوی کدتخفیف · لیست"),
@@ -67,21 +74,44 @@ ADMIN_ITEMS: dict[str, AdminItem] = _items(
 # Rows of each reply menu, by key. The web-panel button is dropped at build time when no web app is configured.
 MENU_LAYOUTS: dict[str, tuple[tuple[str, ...], ...]] = {
     "main": (
-        ("ad.gateway", "ad.stats"),
-        ("ad.panels", "ad.settings"),
-        ("ad.discounts", "ad.make_plan"),
-        ("ad.reseller_plan", "ad.gifts"),
-        ("ad.manage_user", "ad.broadcast"),
-        ("ad.forward",),
-        ("ad.deduct", "ad.add_balance"),
-        ("ad.group_charge", "ad.reset_test"),
-        ("ad.bulk_increase", "ad.lock_channels"),
-        ("ad.logs", "ad.backup"),
-        ("ad.migration",),
-        ("ad.texts", "ad.keyboards"),
-        ("ad.referral", "ad.links"),
+        ("ad.stats", "ad.trial"),
+        ("ad.grp_users", "ad.grp_sales"),
+        ("ad.gateway", "ad.grp_promo"),
+        ("ad.grp_comms", "ad.grp_look"),
+        ("ad.grp_tools",),
         ("ad.docs", "ad.web_panel"),
         ("ad.home",),
+    ),
+    "grp_users": (
+        ("ad.manage_user",),
+        ("ad.add_balance", "ad.deduct"),
+        ("ad.group_charge", "ad.bulk_increase"),
+        ("ad.reset_test",),
+        ("ad.back_panel",),
+    ),
+    "grp_sales": (
+        ("ad.panels",),
+        ("ad.make_plan", "ad.reseller_plan"),
+        ("ad.back_panel",),
+    ),
+    "grp_promo": (
+        ("ad.discounts", "ad.gifts"),
+        ("ad.referral",),
+        ("ad.back_panel",),
+    ),
+    "grp_comms": (
+        ("ad.broadcast", "ad.forward"),
+        ("ad.lock_channels", "ad.links"),
+        ("ad.back_panel",),
+    ),
+    "grp_look": (
+        ("ad.texts", "ad.keyboards"),
+        ("ad.back_panel",),
+    ),
+    "grp_tools": (
+        ("ad.settings", "ad.logs"),
+        ("ad.backup", "ad.migration"),
+        ("ad.back_panel",),
     ),
     "discounts": (
         ("ad.discount_list", "ad.discount_make"),
@@ -96,11 +126,65 @@ MENU_LAYOUTS: dict[str, tuple[tuple[str, ...], ...]] = {
 }
 
 
+# The group buttons of the main menu, by key, and what each group says about itself when opened.
+GROUP_MENUS: dict[str, str] = {
+    "ad.grp_users": "grp_users",
+    "ad.grp_sales": "grp_sales",
+    "ad.grp_promo": "grp_promo",
+    "ad.grp_comms": "grp_comms",
+    "ad.grp_look": "grp_look",
+    "ad.grp_tools": "grp_tools",
+}
+
+GROUP_INTROS: dict[str, str] = {
+    "grp_users": (
+        "**👤 کاربران و موجودی**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **مدیریت کاربر**: آیدی کاربر را بدهید؛ سرویس‌ها، مسدود کردن، پیام و ساخت کانفیگ\n"
+        "▫️ **افزودن / کسر موجودی**: برای یک کاربر\n"
+        "▫️ **شارژ گروهی / افزایش همگانی**: برای همهٔ کاربران یا سرویس‌ها\n"
+        "▫️ **ریست دریافت تست**: اجازهٔ تست دوباره"
+    ),
+    "grp_sales": (
+        "**🛍 فروش و محصولات**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **منوی پنل‌ها**: افزودن پنل، وضعیت و تنظیمات هر پنل\n"
+        "▫️ **ساخت پلن**: پلن‌هایی که کاربر می‌خرد\n"
+        "▫️ **پلن نمایندگی**: فروش پنل نمایندگی"
+    ),
+    "grp_promo": (
+        "**🎟 تخفیف و هدیه**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **کدتخفیف**: درصدی، با سقف استفاده و انقضا\n"
+        "▫️ **کدهای هدیه**: شارژ کیف پول با کد\n"
+        "▫️ **سیستم دعوت دوستان**: پاداش دعوت"
+    ),
+    "grp_comms": (
+        "**📣 ارتباط با کاربران**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **ارسال / فوروارد همگانی**: پیام به همهٔ کاربران\n"
+        "▫️ **قفل چنل‌ها**: عضویت اجباری در کانال\n"
+        "▫️ **لینک‌های آماده**: لینک‌های ربات برای تبلیغ"
+    ),
+    "grp_look": (
+        "**🎨 ظاهر ربات**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **متن‌های ربات**: ویرایش پیام‌ها\n"
+        "▫️ **مدیریت دکمه‌ها**: نام، رنگ و ایموجی دکمه‌ها"
+    ),
+    "grp_tools": (
+        "**⚙️ تنظیمات و ابزارها**\n━━━━━━━━━━━━━━━\n"
+        "▫️ **تنظیمات ربات**: روشن و خاموش کردن امکانات\n"
+        "▫️ **مدیریت لاگ‌ها**: کانال گزارش‌ها\n"
+        "▫️ **بکاپ ربات** و **مایگریشن** از ربات دیگر"
+    ),
+}
+
+
 def manager_groups() -> tuple[tuple[str, tuple[tuple[str, ...], ...]], ...]:
     """Sections of the in-bot keyboard manager page for admin buttons: (heading, rows)."""
+    sections = [("منوی اصلی مدیر", MENU_LAYOUTS["main"])]
+    for key, menu in GROUP_MENUS.items():
+        rows = tuple(row for row in MENU_LAYOUTS[menu] if row != ("ad.back_panel",))
+        sections.append((ADMIN_ITEMS[key].label, rows))
     subs = (
         ("ad.discount_list", "ad.discount_make"),
         ("ad.panel_status", "ad.panel_add"),
         ("ad.back_panel",),
     )
-    return (("منوی اصلی مدیر", MENU_LAYOUTS["main"]), ("زیرمنوها", subs))
+    return (*sections, ("زیرمنوها", subs))
