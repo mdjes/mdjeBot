@@ -98,3 +98,34 @@ async def test_mariadb_admin_rejects_unsafe_identifiers(tmp_path, name, user, pa
     admin = MariaDbAdmin(make_settings(tmp_path))
     with pytest.raises(ProvisionError):
         await admin.create(name, user, password)
+
+
+async def test_redeploying_an_existing_bot_does_not_log_database_exists_warnings(tmp_path, monkeypatch):
+    from builder.services import provisioner
+
+    run: list[str] = []
+
+    class Conn:
+        async def execute(self, statement):
+            run.append(str(statement))
+
+    class Begin:
+        async def __aenter__(self):
+            return Conn()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class Engine:
+        def begin(self):
+            return Begin()
+
+        async def dispose(self):
+            return None
+
+    monkeypatch.setattr(provisioner, "create_async_engine", lambda url: Engine())
+
+    await MariaDbAdmin(make_settings(tmp_path)).create("mdjebot_t6", "t6", "secretpass1")
+
+    assert run[0] == "SET SESSION sql_notes = 0"  # before the IF NOT EXISTS statements that would warn
+    assert any("CREATE DATABASE IF NOT EXISTS `mdjebot_t6`" in statement for statement in run[1:])

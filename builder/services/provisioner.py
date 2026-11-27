@@ -95,6 +95,9 @@ class MariaDbAdmin:
         engine = create_async_engine(self._url)
         try:
             async with engine.begin() as conn:
+                # The statements are idempotent (IF NOT EXISTS) and run again on every redeploy; without this each
+                # one logs a "database exists" / "user already exists" warning for a bot that is simply being updated.
+                await conn.execute(text("SET SESSION sql_notes = 0"))
                 for statement in statements:
                     await conn.execute(text(statement))
         finally:
