@@ -24,6 +24,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
+        fonts-dejavu-core \
         git \
         libffi-dev \
         libssl-dev \

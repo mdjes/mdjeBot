@@ -31,6 +31,8 @@ DEFAULTS: dict[str, str] = {
     "auto_renew_enabled": "1",
     "daily_report_enabled": "0",
     "daily_report_hour": "22",
+    "backup_enabled": "1",
+    "backup_hour": "4",
 }
 
 # (key, label, kind) — kind: bool | int | text. Drives the admin settings screen.
@@ -56,6 +58,8 @@ EDITABLE: tuple[tuple[str, str, str], ...] = (
     ("auto_renew_enabled", "🔁 تمدید خودکار از کیف پول", "bool"),
     ("daily_report_enabled", "📊 گزارش روزانه به مدیران", "bool"),
     ("daily_report_hour", "🕒 ساعت گزارش روزانه (۰ تا ۲۳)", "int"),
+    ("backup_enabled", "🗄 پشتیبان‌گیری شبانه از ربات مشتریان", "bool"),
+    ("backup_hour", "🕒 ساعت پشتیبان‌گیری (۰ تا ۲۳، به وقت تهران)", "int"),
 )
 EDITABLE_KEYS = {key: (label, kind) for key, label, kind in EDITABLE}
 

@@ -24,6 +24,31 @@ CRYPTO_MIN_PROMPT = "حداقل مبلغ درگاه ارزی را وارد کن�
 CRYPTO_MAX_PROMPT = "حداکثر مبلغ درگاه ارزی را وارد کنید:"
 RESELLER_MIN_WALLET_PROMPT = "حداقل موجودی کیف پول برای خرید نمایندگی را وارد کنید (تومان):"
 NUMERIC_ONLY = "لطفا فقط عدد ارسال کنید"
+CARD_LIMITS_INTRO = (
+    "🎯 **سقف روزانهٔ کارت‌ها**\n"
+    "برای هر کارت یک سقف روزانه (تومان) بگذارید. ربات هر خرید را به کارتی نشان می‌دهد که هنوز ظرفیت دارد "
+    "و مبلغ نمایش‌داده‌شده تا رسید یا ۹۰ دقیقه روی آن کارت رزرو می‌ماند؛ این‌طور فشار از روی یک کارت برداشته می‌شود "
+    "و کارت کمتر مسدود می‌شود. روز از نیمه‌شب تهران حساب می‌شود و کارت بدون سقف همیشه آزاد است."
+)
+CARD_LIMIT_PROMPT = "سقف روزانهٔ این کارت را به تومان بفرستید (۰ یعنی بدون سقف):"
+CARD_LIMIT_SAVED = "✅ سقف روزانهٔ کارت ذخیره شد."
+
+
+def card_limits_message(cards, limits: dict[int, int], usage: dict[int, int]) -> str:
+    lines = [CARD_LIMITS_INTRO]
+    for card in cards:
+        cap = limits.get(card.id, 0)
+        used = usage.get(card.id, 0)
+        cap_text = f"{cap:,} تومان" if cap else "بدون سقف"
+        state = ""
+        if cap:
+            state = " ⛔️ پر شده" if used >= cap else f" — باقی‌مانده {cap - used:,}"
+        lines.append(f"💳 `{card.number}` ({card.name})\n   سقف: {cap_text} | امروز: {used:,} تومان{state}")
+    if not cards:
+        lines.append(NO_CARDS_REGISTERED)
+    return "\n".join(lines)
+
+
 PERCENT_RANGE_ERROR = "درصد باید بین 0 تا 100 باشد"
 
 MANUAL_LIMITS_SAVED = "✅ محدودیت کارت دستی ذخیره شد"

@@ -258,7 +258,7 @@ async def manual_card_send_photo_callback(event: events.CallbackQuery.Event):
         await event.answer(texts.ENTER_AMOUNT_FIRST_ALERT, alert=True)
         raise events.StopPropagation
     settings = await SettingsManager().get_settings()
-    ph = await manual_card_amount_placeholders(int(mablagh), settings)
+    ph = await manual_card_amount_placeholders(int(mablagh), settings, event.sender_id)
     receipt_request_text = await get_bot_text(
         key="manual_card_receipt_request",
         default=texts.MANUAL_CARD_RECEIPT_REQUEST_DEFAULT,

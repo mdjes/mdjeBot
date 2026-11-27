@@ -26,6 +26,7 @@ from builder.models import Tenant
 from builder.settings import Settings
 
 _IDENT_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+_ERROR_LINE_RE = re.compile(r"\b(ERROR|CRITICAL)\b")
 _SECRET_RE = re.compile(r"^[A-Za-z0-9]{8,128}$")
 
 
@@ -261,6 +262,38 @@ class Provisioner:
     async def logs(self, tenant: Tenant, tail: int = 60) -> str:
         result = await self._docker("logs", "--tail", str(tail), tenant.container_name, timeout=30)
         return ((result.out or "") + (result.err or "")).strip()
+
+    async def reset_database(self, tenant: Tenant, db_password: str) -> None:
+        """Empty the tenant's database (dropped and created again, same user) ahead of a restore."""
+        try:
+            await self._db.drop(tenant.db_name, tenant.db_user)
+            await self._db.create(tenant.db_name, tenant.db_user, db_password)
+        except ProvisionError:
+            raise
+        except Exception as exc:
+            raise ProvisionError(f"database reset failed: {exc}") from exc
+
+    async def container_stats(self) -> dict[str, tuple[float, float]]:
+        """``{container name: (cpu %, memory % of its limit)}`` for every running container."""
+        result = await self._docker(
+            "stats", "--no-stream", "--format", "{{.Name}}|{{.CPUPerc}}|{{.MemPerc}}", timeout=60
+        )
+        stats: dict[str, tuple[float, float]] = {}
+        for line in (result.out or "").splitlines() if result.ok else []:
+            name, _, rest = line.partition("|")
+            cpu, _, mem = rest.partition("|")
+            try:
+                stats[name.strip()] = (float(cpu.strip().rstrip("%")), float(mem.strip().rstrip("%")))
+            except ValueError:
+                continue
+        return stats
+
+    async def recent_errors(self, tenant: Tenant, since: str = "24h") -> int:
+        """How many ERROR / CRITICAL lines the bot logged recently (its last 3000 lines at most)."""
+        result = await self._docker("logs", "--since", since, "--tail", "3000", tenant.container_name, timeout=45)
+        lines = [*(result.out or "").splitlines(), *(result.err or "").splitlines()]
+        errors = sum(1 for line in lines if _ERROR_LINE_RE.search(line))
+        return errors or sum(1 for line in lines if line.startswith("Traceback (most recent call last)"))
 
     async def exec_json(self, tenant: Tenant, module: str, payload: dict, *, timeout: float = 120.0) -> dict:  # noqa: ASYNC109
         """Run ``python -m <module>`` inside the tenant's container with ``payload`` on stdin.

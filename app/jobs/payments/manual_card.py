@@ -13,6 +13,7 @@ from app.db.crud.transactions import TransactionCRUD
 from app.db.crud.user import UserCRUD
 from app.logger import get_logger
 from app.services.billing.direct_pay_fulfillment import try_fulfill_after_manual_credit
+from app.services.billing.purchase_lines import purchase_lines_for_transaction, purchase_lines_in
 from app.telegram.admin.settings_payment.texts import TX_APPROVED_USER_MESSAGE
 from app.utils.text.bot_texts import get_bot_text
 
@@ -41,6 +42,7 @@ class ManualCardProcessor(BasePaymentProcessor):
             new_amount = result["new_balance"]
             bonus = result["bonus"]
             try:
+                purchase = await purchase_lines_for_transaction(int(tx.id))  # fulfilling clears the pending order
                 fulfilled = await try_fulfill_after_manual_credit(int(tx.id))
                 if not fulfilled:
                     bonus_line = (
@@ -79,6 +81,7 @@ class ManualCardProcessor(BasePaymentProcessor):
                         created_at=tx.created_at,
                         completed_at=result["completed_at"],
                         from_webapp=is_webapp_receipt_log(getattr(current, "message", None)),
+                        purchase=purchase or purchase_lines_in(getattr(current, "message", None)),
                     )
                     await Mdje.edit_message(
                         tx.message_chat_id,

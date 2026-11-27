@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from telethon import events
 
-from app.services.billing.direct_pay_flow import describe_pending_purchase
+from app.services.billing.purchase_lines import describe_pending_purchase
 from app.telegram.admin import menu_press
 from app.telegram.admin.trial import handlers as trial_ui, service as trial
 from app.telegram.keyboards.admin_menu import MENUS

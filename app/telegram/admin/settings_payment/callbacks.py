@@ -18,6 +18,8 @@ from app.services.billing.direct_pay_fulfillment import (
     cancel_after_manual_reject,
     try_fulfill_after_manual_credit,
 )
+from app.services.billing.purchase_lines import purchase_lines_for_transaction
+from app.services.payments import card_rotation
 from app.telegram.admin.settings_payment import keyboards, texts
 from app.telegram.state import set_data, set_step
 from app.utils.text.bot_texts import get_bot_text
@@ -33,6 +35,7 @@ _SETTINGS_PAYMENT_EXACT_CALLBACKS = frozenset(
         "toggle_manual_auto_confirm",
         "toggle_manual_card_random_mode",
         "toggle_manual_card_visibility",
+        "card_limits_menu",
         "maar_rules_menu",
         "maar_add",
         "set_manual_limits",
@@ -51,6 +54,7 @@ _SETTINGS_PAYMENT_EXACT_CALLBACKS = frozenset(
 _SETTINGS_PAYMENT_PREFIXES = (
     "set_active_card:",
     "remove_card:",
+    "card_limit_pick:",
     "maar_view:",
     "maar_toggle:",
     "maar_delete:",
@@ -158,6 +162,7 @@ async def callback_settings_payment(event: events.CallbackQuery.Event):
     elif data.startswith("remove_card:"):
         card_id = int(data.split(":")[1])
         await ManualCardManager().delete_card(card_id)
+        await card_rotation.set_card_limit(card_id, 0)
         await event.edit(texts.CARD_DELETED, buttons=keyboards.back_to_settings_card_row())
 
     elif data == "toggle_manual_auto_confirm":
@@ -184,6 +189,21 @@ async def callback_settings_payment(event: events.CallbackQuery.Event):
         )
         settings = await SettingsManager().get_settings()
         await _refresh_gateway_settings_view(event, settings)
+
+    elif data == "card_limits_menu":
+        await set_step(event.sender_id, "SettingsCardToCard")
+        settings = await SettingsManager().get_settings()
+        cards = await ManualCardManager().get_all_cards()
+        usage = await card_rotation.usage_today(cards)
+        await event.edit(
+            texts.card_limits_message(cards, card_rotation.card_limits(settings), usage),
+            buttons=keyboards.card_limits_buttons(cards),
+        )
+
+    elif data.startswith("card_limit_pick:"):
+        await set_data(event.sender_id, "card_limit_card_id", int(data.split(":")[1]))
+        await set_step(event.sender_id, "card_limit_amount")
+        await event.edit(texts.CARD_LIMIT_PROMPT, buttons=keyboards.card_limit_back_button())
 
     elif data == "maar_rules_menu":
         menu_text, buttons = await _maar_menu()
@@ -284,13 +304,13 @@ async def callback_settings_payment(event: events.CallbackQuery.Event):
         await _refresh_gateway_settings_view(event, settings)
 
 
-async def _review_message_is_webapp(event: events.CallbackQuery.Event) -> bool:
-    """Whether the receipt log being reviewed was posted by the Mini App."""
+async def _review_message_text(event: events.CallbackQuery.Event) -> str | None:
+    """The text of the receipt log being reviewed (it says whether the Mini App posted it, and what is bought)."""
     try:
         message = await event.get_message()
     except Exception:
-        return False
-    return is_webapp_receipt_log(getattr(message, "message", None))
+        return None
+    return getattr(message, "message", None)
 
 
 async def callback_transaction_review(event: events.CallbackQuery.Event):
@@ -308,6 +328,7 @@ async def callback_transaction_review(event: events.CallbackQuery.Event):
         if not result:
             await event.answer(texts.TX_ALREADY_REVIEWED, alert=True)
             raise events.StopPropagation
+        reviewed_text = await _review_message_text(event)
         admin_message = await build_manual_card_log_caption(
             user_id=tx.user_id,
             amount=int(tx.amount),
@@ -319,7 +340,8 @@ async def callback_transaction_review(event: events.CallbackQuery.Event):
             bonus_percent=settings.manual_bonus_percent,
             created_at=tx.created_at,
             completed_at=result["completed_at"],
-            from_webapp=await _review_message_is_webapp(event),
+            from_webapp=is_webapp_receipt_log(reviewed_text),
+            purchase=await purchase_lines_for_transaction(tx_id, reviewed_text),  # before fulfilling clears it
         )
         await event.edit(admin_message, buttons=keyboards.tx_review_result_button(approved=True))
         fulfilled = await try_fulfill_after_manual_credit(tx_id)
@@ -350,6 +372,8 @@ async def callback_transaction_review(event: events.CallbackQuery.Event):
             await event.answer(texts.TX_ALREADY_REVIEWED, alert=True)
             raise events.StopPropagation
         reduser = await UserCRUD().read_user(user_id=tx.user_id)
+        reviewed_text = await _review_message_text(event)
+        purchase = await purchase_lines_for_transaction(tx_id, reviewed_text)  # before the cancel clears it
         await ManualAutoApproveRuleCRUD.cancel_schedule(tx_id)
         completed_at = int(time.time())
         await TransactionCRUD().update(tx_id, status="rejected", completed_at=completed_at)
@@ -361,7 +385,8 @@ async def callback_transaction_review(event: events.CallbackQuery.Event):
             reduser=reduser,
             created_at=tx.created_at,
             completed_at=completed_at,
-            from_webapp=await _review_message_is_webapp(event),
+            from_webapp=is_webapp_receipt_log(reviewed_text),
+            purchase=purchase,
         )
         await event.edit(admin_message, buttons=keyboards.tx_review_result_button(approved=False))
         user_message = await _get_manual_card_custom_text(

@@ -143,6 +143,7 @@ SETTINGS_MENU_SECTIONS = (
             SettingsMenuItem("انتقال کانفیگ", "transfer_config_mode"),
             SettingsMenuItem("اطلاعات بیشتر", "info_mode"),
             SettingsMenuItem("حذف سرویس غیرفعال", "del_service_mode", wide=True),
+            SettingsMenuItem("گزارش هفتگی مصرف به کاربران", "weekly_usage_report_mode", wide=True),
         ),
         columns=2,
     ),

@@ -51,6 +51,8 @@ DEFAULT_PAYMENT_SETTINGS: dict[str, Any] = {
     "manual_card_visibility": None,
     "manual_auto_confirm": False,
     "manual_card_random_mode": False,
+    # Daily cap per card in toman, {"<card id>": amount}; a card without an entry has no cap (see card_rotation).
+    "manual_card_limits": {},
     "manual_deposit_min": 50000,
     "manual_deposit_max": 2000000,
     "crypto_deposit_min": 50000,
@@ -100,6 +102,9 @@ DEFAULT_SERVICE_TOOLS_SETTINGS: dict[str, Any] = {
     "transfer_config_mode": False,
     "info_mode": False,
     "del_service_mode": False,
+    # Friday evening message with the week's usage; the week it was last sent is kept so it goes out once.
+    "weekly_usage_report_mode": False,
+    "weekly_usage_report_last_week": "",
 }
 
 DEFAULT_RESELLER_SETTINGS: dict[str, Any] = {

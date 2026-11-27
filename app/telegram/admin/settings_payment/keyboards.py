@@ -19,6 +19,7 @@ def btn_cardtocard_settings(settings=None):
         [Button.inline(text="📋 انتخاب کارت فعال", data="select_active_card")],
         [Button.inline(text=visibility_text, data="toggle_manual_card_visibility")],
         [Button.inline(text=random_mode_text, data="toggle_manual_card_random_mode")],
+        [Button.inline(text="🎯 سقف روزانهٔ کارت‌ها", data="card_limits_menu")],
         [Button.inline(text=auto_text, data="toggle_manual_auto_confirm")],
         [Button.inline(text="📋 قوانین تایید خودکار", data="maar_rules_menu")],
         [
@@ -125,6 +126,16 @@ def card_list_buttons(cards, callback_prefix: str, active_marker: bool = False):
         buttons.append([Button.inline(label, f"{callback_prefix}:{card.id}")])
     buttons.append(back_to_settings_card_button())
     return buttons
+
+
+def card_limits_buttons(cards):
+    rows = [[Button.inline(f"🎯 {card.number} - {card.name}", f"card_limit_pick:{card.id}")] for card in cards]
+    rows.append(back_to_settings_card_button())
+    return rows
+
+
+def card_limit_back_button():
+    return [Button.inline("بازگشت", data="card_limits_menu")]
 
 
 def no_action_balance_button(new_balance: int):

@@ -194,10 +194,12 @@ async def build_manual_card_log_caption(
     created_at: int | None = None,
     completed_at: int | None = None,
     from_webapp: bool = False,
+    purchase: str = "",
 ) -> str:
     """Full manual-card log caption (same fields as receipt / admin approve).
 
-    ``from_webapp`` keeps the Mini App tag when the log message is rebuilt on review.
+    ``from_webapp`` keeps the Mini App tag when the log message is rebuilt on review, and ``purchase`` keeps
+    the package lines (what the customer chose) under the balance, where the receipt showed them.
     """
     if reduser is None:
         reduser = await UserCRUD().read_user(user_id)
@@ -236,6 +238,8 @@ async def build_manual_card_log_caption(
     if reduser and getattr(reduser, "number", None):
         log_message += f"🔢 **شماره تلفن:** {reduser.number}\n"
     log_message += f"💰 **موجودی:** `{wallet_before:,}` تومان\n"
+    if purchase:
+        log_message += f"{purchase}\n"
     log_message += f"🛡️ **مبلغ وارد شده** `{int(amount):,}` تومان\n"
     if extra_line:
         log_message += f"{extra_line}\n"

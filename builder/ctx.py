@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import io
+from pathlib import Path
 from typing import Protocol
 
 from builder.ui import Buttons, to_telethon_buttons
@@ -26,6 +29,12 @@ class Ctx(Protocol):
     async def forward_to(self, chat_id: int) -> bool: ...
 
     async def delete_incoming(self) -> None: ...
+
+    async def send_photo(self, data: bytes, caption: str, buttons: Buttons | None = None) -> None: ...
+
+    async def download_attachment(self, dest: Path, *, max_bytes: int) -> bool:
+        """Save the file attached to the message the button is on; ``False`` when there is none or it is too big."""
+        ...
 
 
 class TelethonCtx:
@@ -90,3 +99,25 @@ class TelethonCtx:
             return
         with contextlib.suppress(Exception):
             await self.event.delete()
+
+    async def send_photo(self, data: bytes, caption: str, buttons: Buttons | None = None) -> None:
+        picture = io.BytesIO(data)
+        picture.name = "health.png"
+        await self.event.client.send_file(
+            self.user_id,
+            picture,
+            caption=caption,
+            buttons=to_telethon_buttons(buttons) if buttons else None,
+            force_document=False,
+        )
+
+    async def download_attachment(self, dest: Path, *, max_bytes: int) -> bool:
+        try:
+            message = await self.event.get_message()
+            document = getattr(message, "document", None)
+            if document is None or int(getattr(document, "size", 0) or 0) > max_bytes:
+                return False
+            await self.event.client.download_media(message, file=str(dest))
+        except Exception:
+            return False
+        return await asyncio.to_thread(dest.exists)

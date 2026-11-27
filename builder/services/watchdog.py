@@ -53,6 +53,8 @@ class Watchdog:
                 del state[gone]
 
         for tenant in tenants:
+            if tenant.id in self.ops.busy:
+                continue
             counts["checked"] += 1
             if await self.prov.status(tenant) == "running":
                 self._misses.pop(tenant.id, None)

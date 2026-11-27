@@ -90,6 +90,7 @@ class Tenant(Base):
     reminded_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     host_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_backup_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # last nightly / manual backup
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     @property

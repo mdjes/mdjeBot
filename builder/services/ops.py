@@ -31,6 +31,8 @@ class TenantOps:
         self.prov = provisioner
         # Port allocation and `docker run` for the same port must not interleave.
         self._deploy_lock = asyncio.Lock()
+        # Bots whose container is stopped on purpose for a moment (a restore): the watchdog must not start them.
+        self.busy: set[int] = set()
 
     async def _load(self, session, tenant_id: int) -> Tenant | None:
         tenant = await session.get(Tenant, tenant_id)

@@ -21,6 +21,7 @@ from app.jobs.reseller.low_balance_warning import run_reseller_low_balance_warni
 from app.jobs.scheduler import scheduler
 from app.jobs.services.expiration import handle_service_expiration
 from app.jobs.services.low_volume import check_low_volume
+from app.jobs.services.weekly_usage import send_weekly_usage_reports
 from app.logger import LogTag, get_logger
 
 logger = get_logger(__name__)
@@ -40,6 +41,7 @@ def register_all_jobs() -> None:
     job_defs = [
         (handle_service_expiration, "interval", {"seconds": 60}, "service_expiration_handler"),
         (check_low_volume, "interval", {"seconds": 60}, "check_low_volume"),
+        (send_weekly_usage_reports, "interval", {"minutes": 30}, "weekly_usage_reports"),
         (get_cookies, "interval", {"minutes": 5}, "get_cookies"),
         (get_prices_and_update, "interval", {"minutes": 10}, "get_prices_and_update"),
         (auto_confirm_job, "interval", {"seconds": 60}, "auto_confirm_job"),

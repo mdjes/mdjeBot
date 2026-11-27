@@ -1,7 +1,6 @@
 """Balance top-up methods and deposit flows: manual card, crypto and Telegram Stars."""
 
 import asyncio
-import random
 from io import BytesIO
 
 from fastapi import APIRouter, File, Form, UploadFile
@@ -37,6 +36,7 @@ from app.models.webapp import (
 )
 from app.routers.webapp.auth import authenticate_user
 from app.routers.webapp.errors import internal_error
+from app.services.payments import card_rotation
 from app.services.payments.ir_gateways import config as ir_gateway_config
 from app.services.payments.tonpays_config import (
     deposit_limits as tonpays_limits,
@@ -78,15 +78,11 @@ async def get_balance_methods(request: BalanceMethodsRequest) -> BalanceMethodsR
         card_name = None
         if settings.pay_mode and not phone_verify_required:
             cards = await ManualCardManager().get_all_cards()
-            if settings.manual_card_random_mode and cards:
-                card = random.choice(cards)
+            # The amount is not known yet: only look, the card is held when the customer enters the amount.
+            card = await card_rotation.choose_card(settings, cards, user_id=user_id, amount=0, hold=False)
+            if card:
                 card_number = getattr(card, "number", None)
                 card_name = getattr(card, "name", None)
-            else:
-                active = next((c for c in cards if getattr(c, "active", False)), None)
-                if active:
-                    card_number = getattr(active, "number", None)
-                    card_name = getattr(active, "name", None)
         return BalanceMethodsResponse(
             ok=True,
             pay_mode=bool(settings.pay_mode),
@@ -175,12 +171,9 @@ async def deposit_manual(request: BalanceDepositManualRequest) -> BalanceDeposit
                 error=f"مبلغ باید بین {min_a:,} تا {max_a:,} تومان باشد",
             )
         cards = await ManualCardManager().get_all_cards()
-        if settings.manual_card_random_mode and cards:
-            active = random.choice(cards)
-        else:
-            active = next((c for c in cards if getattr(c, "active", False)), None)
-            if not active and cards:
-                active = cards[0]
+        active = await card_rotation.choose_card(settings, cards, user_id=user_id, amount=amount)
+        if not active and cards:
+            active = cards[0]
         card_number = getattr(active, "number", None) if active else None
         card_name = getattr(active, "name", None) if active else None
         return BalanceDepositManualResponse(
@@ -270,6 +263,7 @@ async def deposit_manual_receipt(
             )
 
         tx = await TransactionCRUD().create(user_id=user_id, amount=amount, method="manual")
+        await card_rotation.confirm_pick(user_id)  # the amount now counts on the card shown for the day
         if phash:
             await ReceiptHashCRUD().update_transaction_id(phash, tx.id)
         rule_crud = ManualAutoApproveRuleCRUD()

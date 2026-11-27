@@ -6,11 +6,13 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from builder.db import Database
 from builder.flows.admin import AdminFlows
+from builder.flows.backups import BackupFlows
+from builder.flows.health import HealthFlows
 from builder.flows.panel_admin import PanelAdminFlows
 from builder.flows.panels import PanelFlows
 from builder.flows.user import UserFlows
@@ -19,7 +21,9 @@ from builder.notify import Notifier
 from builder.routing import collect
 from builder.security import SecretBox
 from builder.services import billing
+from builder.services.backup import BackupService
 from builder.services.cfg import Cfg, load_cfg
+from builder.services.health import HealthService, MariaDbStats
 from builder.services.ops import TenantOps
 from builder.services.panels.backend import PasarguardBackend
 from builder.services.panels.ops import PanelOps
@@ -39,7 +43,7 @@ class UserState:
     updated: Any = field(default_factory=utcnow)
 
 
-class BuilderApp(UserFlows, PanelFlows, AdminFlows, PanelAdminFlows):
+class BuilderApp(UserFlows, PanelFlows, AdminFlows, PanelAdminFlows, BackupFlows, HealthFlows):
     def __init__(
         self,
         settings: Settings,
@@ -50,6 +54,8 @@ class BuilderApp(UserFlows, PanelFlows, AdminFlows, PanelAdminFlows):
         *,
         check_token: Callable[[str], Awaitable[BotInfo]] = fetch_bot_info,
         panels: PanelOps | None = None,
+        backups: BackupService | None = None,
+        health: HealthService | None = None,
     ):
         self.settings = settings
         self.db = db
@@ -58,7 +64,10 @@ class BuilderApp(UserFlows, PanelFlows, AdminFlows, PanelAdminFlows):
         self.box = box
         self.check_token = check_token
         self.panels = panels or PanelOps(db, box, PasarguardBackend(box), ops.prov)
+        self.backups = backups or BackupService(db, settings, box, ops.prov, notifier, busy=ops.busy)
+        self.health = health or HealthService(db, ops.prov, reader=MariaDbStats(settings))
         self.states: dict[int, UserState] = {}
+        self._backup_asked: dict[int, datetime] = {}  # when a bot's owner last asked for a backup
         self._background: set[asyncio.Task] = set()
         self.routes, self.state_handlers = collect(self)
 

@@ -15,7 +15,7 @@ from builder.db import Database, ensure_mysql_database
 from builder.models import Plan
 from builder.notify import TelethonNotifier
 from builder.security import SecretBox
-from builder.services import report
+from builder.services import backup, report
 from builder.services.lifecycle import expire_stale_payments, run_expiry_pass
 from builder.services.ops import TenantOps
 from builder.services.panels.sync import run_panel_sync
@@ -105,6 +105,15 @@ async def run_builder(settings: Settings, stop_event: asyncio.Event | None = Non
         except Exception:
             log.exception("daily report failed")
 
+    async def _backup_job():
+        try:
+            outcome = await backup.run_if_due(db, app.backups, notifier, settings.admin_ids)
+            if outcome:
+                log.info("nightly backup: %d sent, %d failed", len(outcome["sent"]), len(outcome["failed"]))
+        except Exception:
+            log.exception("nightly backup failed")
+
+    scheduler.add_job(_backup_job, "interval", minutes=20, max_instances=1, coalesce=True)
     scheduler.add_job(_expiry_job, "interval", minutes=10, max_instances=1, coalesce=True)
     scheduler.add_job(_watchdog_job, "interval", minutes=3, max_instances=1, coalesce=True)
     scheduler.add_job(_report_job, "interval", minutes=20, max_instances=1, coalesce=True)

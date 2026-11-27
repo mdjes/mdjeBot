@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from builder.models import Plan
 from builder.notify import Notifier
 from builder.security import SecretBox
@@ -67,13 +69,57 @@ class FakeDbAdmin:
 class FakeNotifier(Notifier):
     def __init__(self):
         self.sent: list[tuple[int, str]] = []
+        self.files: list[tuple[int, str, str, list | None]] = []  # (chat, file name, caption, buttons)
+        self.file_bytes: list[bytes] = []
+        self.photos: list[tuple[int, bytes, str]] = []
+        self.deliver = True  # False: the owner blocked the bot
 
     async def send(self, chat_id, text, buttons=None) -> bool:
         self.sent.append((chat_id, text))
         return True
 
+    async def send_file(self, chat_id, path, caption, buttons=None) -> bool:
+        if not self.deliver:
+            return False
+        file = Path(path)
+        self.files.append((chat_id, file.name, caption, buttons))
+        self.file_bytes.append(file.read_bytes())  # noqa: ASYNC240 - the sender deletes it right after, so keep what was sent
+        return True
+
+    async def send_photo(self, chat_id, data, caption, buttons=None) -> bool:
+        self.photos.append((chat_id, data, caption))
+        return True
+
     def to(self, chat_id: int) -> list[str]:
         return [text for cid, text in self.sent if cid == chat_id]
+
+
+class FakeSqlTool:
+    """Dumps and loads text instead of running the MariaDB client; ``fail_load`` makes loading ``name`` raise."""
+
+    def __init__(self):
+        self.dumps: list[str] = []
+        self.loads: list[tuple[str, str, str]] = []  # (database, user, content)
+        self.state: dict[str, str] = {}  # database -> what it holds now
+        self.fail_dump: set[str] = set()
+        self.fail_load: set[str] = set()  # contents whose loading fails
+
+    async def dump(self, database, out_path) -> None:
+        from builder.services.backup import BackupError
+
+        if database in self.fail_dump:
+            raise BackupError("dump failed: access denied")
+        self.dumps.append(database)
+        out_path.write_text(self.state.get(database, f"-- empty {database}"), encoding="utf-8")
+
+    async def load(self, database, user, password, sql_path) -> None:
+        from builder.services.backup import BackupError
+
+        content = sql_path.read_text(encoding="utf-8")
+        self.loads.append((database, user, content))
+        if content in self.fail_load:
+            raise BackupError("restore failed: syntax error")
+        self.state[database] = content
 
 
 def make_provisioner(settings: Settings, runner: FakeRunner | None = None, db_admin: FakeDbAdmin | None = None):
@@ -103,6 +149,8 @@ class FakeCtx:
         self.alerts: list[str] = []
         self.forwarded: list[int] = []
         self.deleted = False
+        self.photos: list[tuple[bytes, str, list | None]] = []
+        self.attachment: bytes | None = None  # the file "on the message" the button is under
 
     async def reply(self, text, buttons=None):
         self.out.append(("reply", text, buttons))
@@ -120,6 +168,15 @@ class FakeCtx:
 
     async def delete_incoming(self):
         self.deleted = True
+
+    async def send_photo(self, data, caption, buttons=None):
+        self.photos.append((data, caption, buttons))
+
+    async def download_attachment(self, dest, *, max_bytes):
+        if self.attachment is None or len(self.attachment) > max_bytes:
+            return False
+        dest.write_bytes(self.attachment)
+        return True
 
     @property
     def last(self) -> str:

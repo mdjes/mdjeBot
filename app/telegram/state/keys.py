@@ -51,3 +51,18 @@ def build_direct_pay_tx_key(transaction_id: int) -> str:
 def build_direct_pay_crypto_key(order_id: int) -> str:
     """Link crypto order id to a direct-pay user."""
     return f"{get_redis_namespace()}:direct_pay:crypto:{order_id}"
+
+
+def build_card_load_key(card_id: int, day: str) -> str:
+    """Hash of what customers hold on one card in one Tehran day (``user id`` -> ``amount:expires``)."""
+    return f"{get_redis_namespace()}:card_load:{card_id}:{day}"
+
+
+def build_card_pick_key(user_id: int) -> str:
+    """The card shown to a customer for the payment in progress (``card id:day``)."""
+    return f"{get_redis_namespace()}:card_pick:{user_id}"
+
+
+def build_weekly_report_key(suffix: str) -> str:
+    """Redis key of the weekly usage report (``optout``: customers who turned it off, ``sent:<week>``: done)."""
+    return f"{get_redis_namespace()}:weekly_report:{suffix}"

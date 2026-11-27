@@ -612,6 +612,10 @@ class UserFlows:
         ]
         if tenant.is_trial:
             lines.append("🎁 نسخهٔ آزمایشی")
+        if self._can_back_up(tenant):
+            lines.append(
+                "🗄 آخرین پشتیبان: " + (fmt_date(tenant.last_backup_at) if tenant.last_backup_at else "هنوز گرفته نشده")
+            )
         host = cfg.str("public_host").strip()
         if host and tenant.host_port and tenant.status == TenantStatus.RUNNING:
             lines.append(f"🌐 آدرس سرویس (وب‌هوک/وب‌اپ): <code>{esc(host)}:{tenant.host_port}</code>")
@@ -624,6 +628,8 @@ class UserFlows:
         if cfg.bool("auto_renew_enabled") and cfg.bool("wallet_enabled") and tenant.plan_id and not tenant.is_trial:
             mode = "✅ روشن" if tenant.auto_renew else "⛔️ خاموش"
             rows.insert(1, [Btn(f"🔁 تمدید خودکار: {mode}", f"u:autob:{tenant.id}")])
+        if self._can_back_up(tenant):
+            rows.insert(-1, [Btn("🗄 پشتیبان همین حالا", f"u:bkp:{tenant.id}")])
         if tenant.bot_username:
             rows.insert(0, [Btn("🔗 باز کردن ربات", url=self._bot_link(tenant))])
         await self.show(ctx, "\n".join(lines), [*rows, [Btn("🔙 بازگشت", "u:bots")]])

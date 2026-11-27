@@ -55,7 +55,7 @@ class AdminFlows:
             [Btn("🤖 ربات‌ها", "a:tenants"), Btn("👥 کاربران", "a:users")],
             [Btn("📦 تعرفه‌ها", "a:plans"), Btn("🏦 کارت‌ها", "a:cards")],
             [Btn("🏷 کدهای تخفیف", "a:codes"), Btn("⚙️ تنظیمات", "a:settings")],
-            [Btn("🧩 فروش پنل", "a:pmenu")],
+            [Btn("🧩 فروش پنل", "a:pmenu"), Btn("🩺 سلامت ربات‌ها", "a:health")],
             [Btn("📢 ارسال همگانی", "a:bc"), Btn("🖥 سرور", "a:server")],
             [Btn("🏠 منوی کاربر", "u:home")],
         ]
@@ -295,7 +295,7 @@ class AdminFlows:
         i = tenant.id
         rows: Buttons = [
             [Btn("▶️ شروع", f"a:tstart:{i}"), Btn("⏸ توقف", f"a:tstop:{i}"), Btn("🔁 ریستارت", f"a:trestart:{i}")],
-            [Btn("🚀 دیپلوی مجدد", f"a:tdeploy:{i}"), Btn("📜 لاگ", f"a:tlogs:{i}")],
+            [Btn("🚀 دیپلوی مجدد", f"a:tdeploy:{i}"), Btn("📜 لاگ", f"a:tlogs:{i}"), Btn("🩺 سلامت", f"a:hbot:{i}")],
             [Btn("➕ تمدید (روز)", f"a:text:{i}"), Btn("👤 ادمین‌ها", f"a:tadm:{i}")],
             [Btn("👥 مالک", f"a:user:{tenant.owner_id}"), Btn("🗑 حذف", f"a:tdel:{i}")],
             [Btn("🔙 ربات‌ها", "a:tenants")],

@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import os
-import random
 from decimal import Decimal
 from io import BytesIO
 
@@ -34,7 +33,6 @@ from app.services.billing.direct_pay_flow import (
     DIRECT_PAY_TOPUP_INTRO_DEFAULT,
     REDIS_DIRECT_PAY_ACTIVE,
     REDIS_MABLAGH,
-    describe_pending_purchase,
     fill_placeholders,
     is_direct_pay_active,
 )
@@ -46,6 +44,8 @@ from app.services.billing.direct_pay_store import (
     link_crypto_order,
     link_transaction,
 )
+from app.services.billing.purchase_lines import describe_pending_purchase
+from app.services.payments import card_rotation
 from app.services.pricing.crypto_amounts import crypto_amount_picker
 from app.telegram.keyboards.balance import balance_flow_cancel_rows, create_inline_cartbcard
 from app.telegram.keyboards.common import is_keyboard_config_step
@@ -79,14 +79,12 @@ CRYPTO_INVOICE_WALLETS = {
 }
 
 
-async def build_manual_card_line(settings) -> str:
+async def build_manual_card_line(settings, *, user_id: int | None = None, amount: int = 0) -> str:
+    """The card to pay to. With daily caps set, a card that still has room is shown and the amount held on it."""
     cards = await ManualCardManager().get_all_cards()
-    if settings.manual_card_random_mode and cards:
-        selected_card = random.choice(cards)
-        return f"`{selected_card.number}`\n👤  {selected_card.name}"
-    active = next((c for c in cards if c.active), None)
-    if active:
-        return f"`{active.number}`\n👤  {active.name}"
+    card = await card_rotation.choose_card(settings, cards, user_id=user_id, amount=amount)
+    if card:
+        return f"`{card.number}`\n👤  {card.name}"
     return texts.NO_CARD_REGISTERED
 
 
@@ -132,7 +130,7 @@ async def respond_deposit_numeric_error(
     await event.respond(error_text, buttons=await keyboards.balance_amount_error_rows())
 
 
-async def manual_card_amount_placeholders(amount_toman: int, settings) -> dict[str, str]:
+async def manual_card_amount_placeholders(amount_toman: int, settings, user_id: int | None = None) -> dict[str, str]:
     amount_rial = amount_toman * 10
     formatted_toman = f"{amount_toman:,}"
     formatted_rial = f"{amount_rial:,}"
@@ -142,7 +140,7 @@ async def manual_card_amount_placeholders(amount_toman: int, settings) -> dict[s
             "amount": formatted_toman,
             "amount_toman": formatted_toman,
             "amount_rial": formatted_rial,
-            "card_line": await build_manual_card_line(settings),
+            "card_line": await build_manual_card_line(settings, user_id=user_id, amount=amount_toman),
         }
     )
     return placeholders
@@ -267,7 +265,7 @@ async def return_to_home_menu(event) -> None:
 
 async def manual_card_send_channel_info(event, amount_toman: int, *, edit: bool = False) -> None:
     settings = await SettingsManager().get_settings()
-    placeholders = await manual_card_amount_placeholders(amount_toman, settings)
+    placeholders = await manual_card_amount_placeholders(amount_toman, settings, event.sender_id)
     text_template = await get_bot_text(
         key="manual_card_info",
         default=texts.MANUAL_CARD_INFO_DEFAULT,
@@ -533,9 +531,9 @@ async def mablagh_sharj_handler(event: Message):
                     log_message_dup = (
                         f"{texts.DUPLICATE_RECEIPT_LOG_HEADER}"
                         f"{user_info}\n"
-                        f"{purchase_block}"
                         f"🔢 **شماره تلفن:** {reduser.number}\n"
                         f"💰 **موجودی:** `{reduser.amount:,}` تومان\n"
+                        f"{purchase_block}"
                         f"🛡️ **مبلغ وارد شده** `{int(mablagh):,}` تومان\n"
                         f"📊 **دستی:** تایید `{manual_approved:,}` | رد `{manual_rejected:,}`\n"
                         f"🤖 **خودکار:** تایید `{auto_approved:,}` | رد `{auto_rejected:,}`\n"
@@ -559,6 +557,7 @@ async def mablagh_sharj_handler(event: Message):
         await event.respond(mesg_resid, buttons=await bhome_buttons(event.sender_id, "fa"))
         reduser = await UserCRUD().read_user(user_id=int(event.sender_id))
         tx = await TransactionCRUD().create(user_id=int(event.sender_id), amount=int(mablagh), method="manual")
+        await card_rotation.confirm_pick(int(event.sender_id))  # the amount now counts on that card for the day
         if await is_direct_pay_active(event.sender_id) or await get_pending_for_user(event.sender_id):
             await link_transaction(int(event.sender_id), int(tx.id))
         duplicate_check_failed = phash_str is None
@@ -588,9 +587,9 @@ async def mablagh_sharj_handler(event: Message):
         log_message = (
             f"{texts.MANUAL_RECEIPT_LOG_HEADER}"
             f"{user_info}\n"
-            f"{purchase_block}"
             f"🔢 **شماره تلفن:** {reduser.number}\n"
             f"💰 **موجودی:** `{reduser.amount:,}` تومان\n"
+            f"{purchase_block}"
             f"🛡️ **مبلغ وارد شده** `{int(mablagh):,}` تومان\n"
             f"{auto_status}\n"
             f"📊 **دستی:** تایید `{manual_approved:,}` | رد `{manual_rejected:,}`\n"

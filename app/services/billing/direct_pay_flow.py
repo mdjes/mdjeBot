@@ -18,7 +18,6 @@ from app.telegram.user.balance.states import (
     CALLBACK_BACK_TO_BALANCE,
     STEP_CART_B_CART,
 )
-from app.utils.formatting.conversions import convert_storage
 from app.utils.text.bot_texts import get_bot_text
 from app.utils.text.default_texts import DEFAULT_BOT_TEXTS
 
@@ -200,30 +199,6 @@ async def create_direct_pay_balance_button(user_id: int):
     """Always wire the add-balance button to direct-pay top-up callback."""
     balance_button_text = await get_button_text("bt.menu_add_balance", "💰 افزایش موجودی")
     return [[Button.inline(balance_button_text, data=CALLBACK_DIRECT_PAY_TOPUP)]]
-
-
-def describe_pending_purchase(pending: dict[str, Any] | None) -> str:
-    """What the customer is paying for, as lines for the receipt the admin reviews ('' for a plain top-up)."""
-    if not pending:
-        return ""
-    payload = pending.get("payload") or {}
-    label = str(payload.get("product_label") or "").strip()
-    volume = str(payload.get("volume") or "").strip()
-    if not volume and payload.get("gig"):  # a custom purchase keeps the number, not the wording
-        try:
-            volume = convert_storage(float(payload["gig"]))
-        except TypeError, ValueError:
-            volume = ""
-    lines = []
-    if label:
-        lines.append(f"🛒 **خرید:** {label}")
-    if volume:
-        lines.append(f"📦 **حجم انتخابی:** {volume}")
-    if payload.get("custom_days"):
-        lines.append(f"⏰ **مدت:** {payload['custom_days']} روز")
-    if pending.get("amount"):
-        lines.append(f"💳 **مبلغ سفارش:** `{int(pending['amount']):,}` تومان")
-    return "\n".join(lines)
 
 
 async def build_vpn_payload_from_session(user_id: int) -> dict[str, Any]:

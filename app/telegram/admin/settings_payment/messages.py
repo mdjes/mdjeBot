@@ -8,6 +8,7 @@ from telethon.tl.custom import Message
 from app import Mdje
 from app.db.crud.cards import ManualCardManager
 from app.db.crud.settings import SettingsManager
+from app.services.payments import card_rotation
 from app.telegram.admin.settings_payment import keyboards, texts
 from app.telegram.admin.settings_payment.callbacks import _maar_crud, _maar_menu
 from app.telegram.state import clear_user, get_data, get_step, set_data, set_step
@@ -59,6 +60,17 @@ async def message_handler_settings_payment(event: Message):
         await clear_user(event.sender_id)
         await set_step(event.sender_id, "SettingsCardToCard")
         await event.respond(texts.CARD_ADDED_SUCCESS)
+
+    elif await get_step(event.sender_id) == "card_limit_amount" and msg:
+        amount = card_rotation.parse_toman(msg)
+        card_id = await get_data(event.sender_id, "card_limit_card_id")
+        if amount is None or not card_id:
+            await event.respond(texts.NUMERIC_ONLY)
+        else:
+            await card_rotation.set_card_limit(int(card_id), amount)
+            await clear_user(event.sender_id)
+            await set_step(event.sender_id, "SettingsCardToCard")
+            await event.respond(texts.CARD_LIMIT_SAVED, buttons=keyboards.card_limit_back_button())
 
     elif await get_step(event.sender_id) == "set_manual_min" and msg.isdigit():
         await set_data(event.sender_id, "manual_deposit_min", int(msg))
