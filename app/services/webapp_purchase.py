@@ -23,10 +23,12 @@ from app.services.panels.settings import panel_default_group_ids, panel_display_
 from app.services.purchase_report import send_purchase_report
 from app.services.send_queue import enqueue
 from app.services.subscriptions.links import format_subscription_links_for_message
+from app.services.users import naming
 from app.services.users.identifiers import generate_username
 from app.utils.formatting.conversions import convert_storage, gigabytes_to_bytes, plan_duration_to_expire
 from app.utils.formatting.dates import Time_Date
 from app.utils.formatting.traffic import format_ip_limit
+from config import BOT_TAG
 
 logger = get_logger(__name__)
 
@@ -120,13 +122,17 @@ class WebAppPurchaseService:
             "plans": [self._plan_item(plan) for plan in plans],
         }
 
-    async def generate_username(self, panel_code: int) -> dict[str, Any]:
+    async def generate_username(self, panel_code: int, *, user_id: int | None = None) -> dict[str, Any]:
         panel = await self.panels.get_panel_by_code(panel_code)
         if not panel:
             return {"ok": False, "error": "پنل یافت نشد"}
 
-        for _ in range(8):
-            username = generate_username()
+        cfg = await naming.load_config()
+        ctx = await naming.make_context(cfg, user_id=user_id, fallback_bot=BOT_TAG)
+        for attempt in range(8):
+            username = naming.build_name(
+                cfg.template, ctx, widen=max(0, attempt - 1), case=cfg.case, legacy=generate_username
+            )
             try:
                 await PasarguardAPI(panel.base_url).get_user_by_username(username=username, token=panel.cookie)
             except HTTPStatusError as e:

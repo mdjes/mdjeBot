@@ -35,9 +35,11 @@ from app.telegram.user.shop.helpers import (
     _load_purchase_context,
     _show_buy_username_prompt,
     _user_lang,
+    auto_name_purchase,
     clear_custom_buy_session,
     generate_volume_buttons,
     resolve_buy_plan_from_session,
+    sender_username,
     show_buy_service_selection,
     show_buy_vpn_plans,
 )
@@ -136,6 +138,8 @@ async def select_plan_for_buy_callback(event: events.CallbackQuery.Event):
     await PanelsManager().get_panel_by_code(code=panel_code)
 
     await set_step(event.sender_id, "enter_username")
+    if await auto_name_purchase(event, edit=True):
+        raise events.StopPropagation
     username_message = await get_bot_text(
         key="enter_username_message",
         default=DEFAULT_BOT_TEXTS["enter_username_message"],
@@ -164,7 +168,9 @@ async def generate_buy_username_callback(event: events.CallbackQuery.Event):
         return
     panel, _gig, _plan = await _buy_username_context(event.sender_id)
     try:
-        username = await generate_unique_username(panel)
+        username = await generate_unique_username(
+            panel, user_id=event.sender_id, tg_username=await sender_username(event)
+        )
     except UsernameLookupError:
         await event.answer(await username_check_failed_text(), alert=True)
         raise events.StopPropagation from None

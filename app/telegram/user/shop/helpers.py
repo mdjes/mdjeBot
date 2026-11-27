@@ -58,6 +58,8 @@ from app.telegram.shared.keyboards.plan_buttons import build_plan_inline_button
 from app.telegram.shared.utils.media import respond_with_photo_and_text, send_photo_and_text_to_user
 from app.telegram.shared.utils.notices import notify_wallet_purchase
 from app.telegram.shared.utils.username import (
+    UsernameLookupError,
+    generate_unique_username,
     handle_buy_username_conflict,
     is_panel_username_conflict,
 )
@@ -385,6 +387,35 @@ async def _confirm_buy_username(event, username: str, *, edit: bool) -> None:
         await event.edit(confirm_text, buttons=confirm_buttons, link_preview=False)
     else:
         await event.respond(confirm_text, buttons=confirm_buttons, link_preview=False)
+
+
+async def sender_username(event) -> str | None:
+    """The Telegram @username of whoever pressed or wrote, for the ``{user}`` part of a default name."""
+    try:
+        sender = await event.get_sender()
+    except Exception:
+        return None
+    return getattr(sender, "username", None)
+
+
+async def auto_name_purchase(event, *, edit: bool) -> bool:
+    """When the shop names configs itself, pick the default name and go straight to the confirmation.
+
+    Returns False (and the customer is asked for a name as usual) when the option is off or the panel could not
+    be asked whether the name is free.
+    """
+    settings = await SettingsManager().get_settings()
+    if not settings or not getattr(settings, "config_name_auto", False):
+        return False
+    panel, _gig, _plan = await _buy_username_context(event.sender_id)
+    try:
+        username = await generate_unique_username(
+            panel, user_id=event.sender_id, tg_username=await sender_username(event)
+        )
+    except UsernameLookupError:
+        return False
+    await _confirm_buy_username(event, username, edit=edit)
+    return True
 
 
 async def _load_purchase_context(user_id: int):

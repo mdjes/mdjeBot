@@ -947,8 +947,9 @@ async def handle_manage_user_service_callbacks(event: events.CallbackQuery.Event
     elif data == "admin_random_username":
         panel_code = await get_data(event.sender_id, "AdminPanel")
         panel = await PanelsManager().get_panel_by_code(code=panel_code)
+        target_user = await get_data(event.sender_id, "UserID")
         try:
-            username = await generate_unique_username(panel)
+            username = await generate_unique_username(panel, user_id=int(target_user) if target_user else None)
         except UsernameLookupError:
             await event.answer("❌ بررسی نام کانفیگ در پنل ممکن نشد؛ دوباره تلاش کنید.", alert=True)
             return

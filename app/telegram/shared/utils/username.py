@@ -1,19 +1,20 @@
-import re
 from typing import Any
 
 from httpx import HTTPStatusError
 from pasarguard import PasarguardAPI
 
 from app.logger import get_logger
+from app.services.users import naming
 from app.services.users.identifiers import generate_username
 from app.telegram.keyboards.buy import buy_cancel_button, buy_retry_username_button
 from app.telegram.state import set_step
 from app.utils.text.bot_texts import get_bot_text
 from app.utils.text.default_texts import DEFAULT_BOT_TEXTS
+from config import BOT_TAG
 
 logger = get_logger(__name__)
 
-USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_]{1,30}[A-Za-z0-9]$")
+USERNAME_RE = naming.NAME_RE
 
 PANEL_USERNAME_CONFLICT_CODES = frozenset((409, 400, 422))
 
@@ -45,14 +46,29 @@ async def is_username_free(panel: Any, username: str) -> bool:
     return False
 
 
-async def generate_unique_username(panel: Any) -> str:
-    """A random username the panel reports as free; raises :class:`UsernameLookupError` if it cannot check."""
-    username = generate_username()
-    for _ in range(5):
+async def generate_unique_username(panel: Any, *, user_id: int | None = None, tg_username: str | None = None) -> str:
+    """The default name for a config, one the panel reports as free (the admin chooses its pattern).
+
+    Raises :class:`UsernameLookupError` if the panel cannot be asked. After two names that were taken, random
+    digits are added so even a fixed template such as ``{bot}_{id}`` finds a free name.
+    """
+    cfg = await naming.load_config()
+    ctx = await naming.make_context(cfg, user_id=user_id, tg_username=tg_username, fallback_bot=BOT_TAG)
+    username = ""
+    for attempt in range(6):
+        username = naming.build_name(
+            cfg.template, ctx, widen=max(0, attempt - 1), case=cfg.case, legacy=generate_username
+        )
         if await is_username_free(panel, username):
             break
-        username = generate_username()
     return username
+
+
+async def apply_typed_name_rules(username: str) -> tuple[str | None, str | None]:
+    """A name a customer typed, after the admin's rules (case, forbidden words, bot prefix): ``(name, error)``."""
+    cfg = await naming.load_config()
+    ctx = await naming.make_context(cfg, fallback_bot=BOT_TAG)
+    return naming.check_typed(username, cfg, ctx)
 
 
 async def username_check_failed_text() -> str:

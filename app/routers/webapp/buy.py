@@ -54,8 +54,8 @@ async def get_buy_plans(request: WebAppBuyPlansRequest) -> WebAppBuyPlansRespons
 async def generate_buy_username(request: WebAppBuyUsernameRequest) -> WebAppBuyUsernameResponse:
     """Generate an available-ish config username for the selected panel."""
     try:
-        await authenticate_user(init_data=request.init_data, session_token=request.session_token)
-        payload = await WebAppPurchaseService().generate_username(request.panel_code)
+        user_id = await authenticate_user(init_data=request.init_data, session_token=request.session_token)
+        payload = await WebAppPurchaseService().generate_username(request.panel_code, user_id=user_id)
         return WebAppBuyUsernameResponse(**payload)
     except ValueError as e:
         return WebAppBuyUsernameResponse(ok=False, error=str(e))

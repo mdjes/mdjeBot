@@ -89,6 +89,14 @@ DEFAULT_PURCHASE_SETTINGS: dict[str, Any] = {
     "admin_unlimited_trial": False,
     "direct_pay_purchase_mode": False,
     "direct_pay_renew_mode": False,
+    # Default config names (see app/services/users/naming.py): template, {bot} name, letter case, a bot prefix for
+    # names customers type, forbidden words, and naming without asking the customer.
+    "config_name_template": "",
+    "config_name_bot": "",
+    "config_name_case": "keep",
+    "config_name_prefix_typed": False,
+    "config_name_blocked": "",
+    "config_name_auto": False,
 }
 
 DEFAULT_SERVICE_TOOLS_SETTINGS: dict[str, Any] = {

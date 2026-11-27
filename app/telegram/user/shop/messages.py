@@ -34,6 +34,7 @@ from app.telegram.shared.keyboards.panel_buttons import build_panel_display_butt
 from app.telegram.shared.utils.maintenance import bot_is_offline
 from app.telegram.shared.utils.username import (
     UsernameLookupError,
+    apply_typed_name_rules,
     is_username_free,
     is_valid_username,
     username_check_failed_text,
@@ -56,6 +57,7 @@ from app.telegram.user.shop.helpers import (
     _confirm_buy_username,
     _format_bot_text,
     _user_lang,
+    auto_name_purchase,
     resolve_buy_plan_from_session,
     show_buy_vpn_plans,
 )
@@ -183,6 +185,8 @@ async def custom_buy_input_handler(event: Message):
             },
         )
         await set_step(user_id, "enter_username")
+        if await auto_name_purchase(event, edit=False):
+            raise events.StopPropagation
         username_message = await get_bot_text(
             key="enter_username_message",
             default=DEFAULT_BOT_TEXTS["enter_username_message"],
@@ -215,6 +219,10 @@ async def buy_username_message_handler(event: Message):
             "❌ نام کاربری باید بین ۳ تا ۳۲ کاراکتر و فقط شامل حروف انگلیسی، اعداد و زیرخط باشد.",
             buttons=retry_buttons,
         )
+        raise events.StopPropagation
+    username, rule_error = await apply_typed_name_rules(username)
+    if rule_error:
+        await event.respond(rule_error, buttons=retry_buttons)
         raise events.StopPropagation
     try:
         username_free = await is_username_free(panel, username)
